@@ -90,7 +90,7 @@ def find_icon_location(k, lushi, icon, kk=0.8699):
 
     result = cv2.matchTemplate(lushi, icon, cv2.TM_CCOEFF_NORMED)
     (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(result)
-    if k == 'b-try':
+    if k == 'b-try' or k == 'not_ready_dots' or k == 'skill_select':
         kk = 0.68
         
     if k.startswith('final_reward'):
@@ -282,8 +282,8 @@ class Agent:
         
                     
     def run(self):
-        # self.do_shutdown()
-        self.run_pve_full(no='1-1', reward_count=3, max_member_ready=3, max_buf_ready=3, ext_reward=True)
+        # self.run_pve_break(no='2-6', for_jy=True)
+        self.run_pve_full(no='2-6', reward_count=5, max_member_ready=2, max_buf_ready=3, ext_reward=True)
 
     def run_test(self):
         global rect
@@ -407,7 +407,7 @@ class Agent:
                         break
 
 
-                if self.member_ready_acc >= max_member_ready:
+                if self.member_ready_acc >= max_member_ready or self.buf_ready_acc >= max_buf_ready:
                     time.sleep(0.9)
                     self.give_up()
                     continue
@@ -472,7 +472,7 @@ class Agent:
                 self.state = 'map'
                 self.do_treasure_list()
 
-                if self.member_ready_acc >= max_member_ready + 1:
+                if self.member_ready_acc >= max_member_ready + 1 or self.buf_ready_acc >= max_buf_ready:
                     time.sleep(0.9)
                     self.give_up()
                     
@@ -518,7 +518,7 @@ class Agent:
             r_click()
             time.sleep(10) if 'start_game' in states else time.sleep(self.while_delay)
 
-    def run_pve_break(self, no='2-5'):
+    def run_pve_break(self, no='2-5', for_jy=False):
         global rect
 
         self.acc, self.state, self.no = 0, '', no
@@ -586,11 +586,16 @@ class Agent:
 
             if 'treasure_list' in states or 'treasure_replace' in states:
                 self.do_treasure_list()
+                time.sleep(0.9)
+                self.give_up()
+                [x_click(self.start_game_relative_loc) for _ in range(5)]
                 continue
 
             if 'skill_select' in states or 'not_ready_dots' in states:
                 x_click(self.start_game_relative_loc)
                 time.sleep(0.2)
+                if for_jy:
+                    time.sleep(23.2)
                 self.do_skill_select()
                 time.sleep(0.2)
                 x_click(self.start_battle_loc)
