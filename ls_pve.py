@@ -45,67 +45,97 @@ def find_lushi_window():
     return t_rect, image
 
 
+        
+def set_top_window(title='炉石传说'):
+    top_windows = []
+    
+    def windowEnumerationHandler(hwnd, top_windows):
+        top_windows.append((hwnd, win32gui.GetWindowText(hwnd)))
+    
+    win32gui.EnumWindows(windowEnumerationHandler, top_windows)
+    for i in top_windows:
+        if title in i[1].lower():
+            win32gui.ShowWindow(i[0],5)
+            win32gui.SetForegroundWindow(i[0])
+            return True
+    else:
+        return False
+            
+
 G_ICON_RANGE_CACHE = {}
 
+G_ICON_RANGE_STATIC = {
+    'not_ready_dots': [(650, 530), (1020, 600)],
+    'final_reward2': [(490, 210), (1200, 770)],
+}
+for t in ['b-fh', 'b-zs', 'b-fs', 'b-ck', 'b-try']:
+    G_ICON_RANGE_STATIC[t] = [(300, 370), (1010, 650)]
+
+def d_range(icon, pos, mw=20, mh=10):
+    w = icon.shape[1] // 2
+    h = icon.shape[0] // 2
+    ww = w if w < mw else mw
+    hh = h if w < mh else mh
+    return [(pos[0] - w - ww, pos[1] - h - hh), (pos[0] + w + ww, pos[1] + h + hh)]
+
+G_CACHE_MAP = {
+    'member_ready': d_range,
+    'battle_ready': d_range,
+    'treasure_list': d_range,
+    'treasure_replace': d_range,
+    'skill_select': d_range,
+    'visitor_list': d_range,
+    '1-1': d_range,
+    '2-5': d_range,
+    '2-6': d_range,
+    'f-fh': d_range,
+    'f-buf': d_range,
+    'stranger': d_range,
+    'blue_portal': d_range,
+    'destroy': d_range,
+    'boom': d_range,
+    'cfm_done': d_range,
+    'cfm_reward': d_range,
+    'start_game': d_range,
+    'map_not_ready': d_range,
+    'start_point': d_range,
+    'team_lock': d_range,
+    'team_list': d_range,
+    'final_reward': d_range,
+}
 
 def find_icon_location(k, lushi, icon, kk=0.8699):
     global G_ICON_RANGE_CACHE
 
-    def d_range(pos):
-        w = icon.shape[1] // 2
-        h = icon.shape[0] // 2
-        ww = w if w < 20 else 20
-        hh = h if w < 10 else 10
-        return [(pos[0] - w - ww, pos[1] - h - hh), (pos[0] + w + ww, pos[1] + h + hh)]
-
-    cache_map = {
-        'member_ready': d_range,
-        'battle_ready': d_range,
-        'treasure_list': d_range,
-        'treasure_replace': d_range,
-        # 'not_ready_dots': d_range,
-        'skill_select': d_range,
-        'visitor_list': d_range,
-        '1-1': d_range,
-        '2-5': d_range,
-        '2-6': d_range,
-        'f-fh': d_range,
-        'f-buf': d_range,
-        'stranger': d_range,
-        'blue_portal': d_range,
-        'destroy': d_range,
-        'boom': d_range,
-        # 'final_reward': d_range,
-        'cfm_done': d_range,
-        'cfm_reward': d_range,
-        'start_game': d_range,
-        'map_not_ready': d_range,
-        'start_point': d_range,
-        'team_lock': d_range,
-        'team_list': d_range,
-    }
     if k in G_ICON_RANGE_CACHE:
-        p1, p2 = (cache_map[k])(G_ICON_RANGE_CACHE[k])
+        p1, p2 = (G_CACHE_MAP[k])(icon, G_ICON_RANGE_CACHE[k])
         lushi = lushi[p1[1]:p2[1], p1[0]:p2[0]]
-
+    elif k in G_ICON_RANGE_STATIC:
+        p1, p2 = G_ICON_RANGE_STATIC[k]
+        lushi = lushi[p1[1]:p2[1], p1[0]:p2[0]]
+        
     result = cv2.matchTemplate(lushi, icon, cv2.TM_CCOEFF_NORMED)
     (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(result)
     if k == 'b-try' or k == 'not_ready_dots' or k == 'skill_select':
         kk = 0.68
         
     if k.startswith('final_reward'):
-        kk = 0.65
+        kk = 0.55
         
     if maxVal > kk:
         maxVal = round(maxVal, 3)
-        tmp = (cache_map[k])(G_ICON_RANGE_CACHE[k])[0] if k in G_ICON_RANGE_CACHE else (0, 0)
-
+        tmp = (0, 0)
+        if k in G_ICON_RANGE_CACHE:
+            tmp = (G_CACHE_MAP[k])(icon, G_ICON_RANGE_CACHE[k])[0]
+        elif k in G_ICON_RANGE_STATIC:
+            tmp = G_ICON_RANGE_STATIC[k][0]
+        
         startX, startY = tmp[0] + maxLoc[0], tmp[1] + maxLoc[1]
         px = startX + icon.shape[1] // 2
         py = startY + icon.shape[0] // 2
-        ret = (True, px, py, -maxVal if k in G_ICON_RANGE_CACHE else maxVal)
+        ret = (True, px, py, -maxVal if k in G_ICON_RANGE_CACHE or k in G_ICON_RANGE_STATIC else maxVal)
 
-        if k in cache_map:
+        if k in G_CACHE_MAP:
             G_ICON_RANGE_CACHE[k] = (px, py)
 
         # print(_t(), 'CACHE:', G_ICON_RANGE_CACHE)
@@ -143,7 +173,7 @@ class Agent:
         self.while_delay = while_delay
 
         self.hero_relative_locs = [
-            (677, 632),
+            (692, 632),
             (807, 641),
             (943, 641)
         ]
@@ -248,27 +278,31 @@ class Agent:
         x_click(self.treasure_collect_loc)
 
     def do_skill_select(self):
+        time.sleep(0.2)
         if self.hero_cnt == 1:
             mid_hero_loc = self.hero_relative_locs[1]
             x_click(mid_hero_loc)
             for idx, skill_id, target_id in zip([0, 1, 2], self.skills_id, self.targets_id):
                 if idx != 1:
                     continue
-                time.sleep(0.1)
+                time.sleep(0.2)
                 x_click(self.skill_relative_locs[skill_id])
 
                 if target_id != -1:
                     x_click(self.enemy_mid_location)
             return 
-            
+
         first_hero_loc = self.hero_relative_locs[0]
         x_click(first_hero_loc)
         for idx, skill_id, target_id in zip([0, 1, 2], self.skills_id, self.targets_id):
-            time.sleep(0.1)
+            time.sleep(0.2)
             x_click(self.skill_relative_locs[skill_id])
 
             if target_id != -1:
                 x_click(self.enemy_mid_location)
+
+            if self.hero_cnt == 2 and idx == 1:
+                break
 
     def do_select_stranger(self):
         visitor_id = np.random.randint(0, 3)
@@ -282,8 +316,8 @@ class Agent:
         
                     
     def run(self):
-        # self.run_pve_break(no='2-6', for_jy=True)
-        self.run_pve_full(no='2-6', reward_count=5, max_member_ready=2, max_buf_ready=3, ext_reward=True)
+        # self.run_pve_break(no='2-6', for_jy=False)
+        self.run_pve_full(no='1-1', reward_count=3, max_member_ready=99, max_buf_ready=99, ext_reward=True)
 
     def run_test(self):
         global rect
@@ -307,14 +341,15 @@ class Agent:
             time.sleep((np.random.rand() + delay) if delay > 0 else 0.3)
             states, rect = self.check_state(ext_buf = self.state != 'battle', ext_reward = ext_reward)
 
-            delay = delay if states else (delay + 0.1)
-            self.empty_acc = 0 if states else (self.empty_acc + 1)
+            delay = (delay + 0.1) if not states else delay
+            self.empty_acc = (self.empty_acc + 1) if not states or 'cfm_done' in states else 0                
             delay = delay if delay < 3 else 3
             print(_t(), self.state + ':', states, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, round(delay, 2))
 
             if self.empty_acc >= 10:
                 self.empty_acc = 0
                 self.give_up()
+                set_top_window()
                 self.shutdown_acc += 1
                 if self.shutdown_acc >= 5:
                     self.do_shutdown()
@@ -528,8 +563,8 @@ class Agent:
             time.sleep((np.random.rand() + delay) if delay > 0 else 0.3)
             states, rect = self.check_state()
 
-            delay = delay if states else (delay + 0.1)
-            self.empty_acc = 0 if states else (self.empty_acc + 1)
+            delay = (delay + 0.1) if not states else delay
+            self.empty_acc = (self.empty_acc + 1) if not states or 'cfm_done' in states else 0
             delay = delay if delay < 3 else 3
             print(_t(), 'states:', states, self.empty_acc, round(delay, 2))
 
@@ -617,7 +652,7 @@ class Agent:
             
         lushi, image = find_lushi_window()
         output_list = {}
-        try_keys = ['battle_ready', 'member_ready', 'not_ready_dots', 'treasure_list', 'treasure_replace', 'skill_select', self.no]
+        try_keys = ['battle_ready', 'member_ready', 'treasure_list', 'treasure_replace', 'skill_select', 'not_ready_dots', self.no]
         try_keys = (try_keys + ['visitor_list']) if ext_sp else try_keys
 
         ext_keys = []
@@ -628,7 +663,7 @@ class Agent:
             
         ext_keys = (['b-sp', ] + ext_keys + ['stranger', 'blue_portal', 'destroy', 'boom']) if ext_sp else ext_keys
         
-        ext_keys = (ext_keys + ['final_reward', 'cfm_done', 'cfm_reward']) if ext_reward else ext_keys
+        try_keys = (try_keys + ['final_reward', 'final_reward2', 'cfm_done', 'cfm_reward']) if ext_reward else try_keys
         base_keys = ['start_game', 'map_not_ready', 'start_point']
         base_keys = (base_keys + ['team_lock', 'team_list']) if self.acc < 90 else base_keys
 
