@@ -31,11 +31,18 @@ def _t(tag='info', now=None):
     return ret + ' [' + tag.upper() + ']'
 
 
-def find_lushi_window():
+def find_lushi_window(acc):
     global G_HWND, G_RECT
 
     hwnd = G_HWND if G_HWND else findTopWindow("炉石传说")
     G_HWND = hwnd
+
+    if acc % 100 == 13 or not hwnd:
+        hwnd = findTopWindow("炉石传说")
+        G_HWND = hwnd if hwnd else None
+
+    if not G_HWND:
+        return G_RECT, None
 
     t_rect = G_RECT if G_RECT else win32gui.GetWindowPlacement(hwnd)[-1]
     G_RECT = t_rect
@@ -45,7 +52,6 @@ def find_lushi_window():
     return t_rect, image
 
 
-        
 def set_top_window(title='炉石传说'):
     top_windows = []
     
@@ -650,7 +656,10 @@ class Agent:
         if ext_reward is None:
             ext_reward = self.no == '1-1'
             
-        lushi, image = find_lushi_window()
+        rect, image = find_lushi_window(self.acc)
+        if image is None:
+            return {}, rect
+            
         output_list = {}
         try_keys = ['battle_ready', 'member_ready', 'treasure_list', 'treasure_replace', 'skill_select', 'not_ready_dots', self.no]
         try_keys = (try_keys + ['visitor_list']) if ext_sp else try_keys
@@ -672,10 +681,10 @@ class Agent:
         second_check = [(kk, self.icons[kk]) for kk in need_keys if kk not in first_check and kk in self.icons]
 
         for k, v in first_check:
-            success, click_loc, conf = self.find_icon(k, v, lushi, image)
+            success, click_loc, conf = self.find_icon(k, v, rect, image)
             if success:
                 output_list[k] = (click_loc, conf)
-                return output_list, lushi
+                return output_list, rect
 
         for k, v in second_check:
             pre = ''
@@ -685,18 +694,18 @@ class Agent:
             if pre and pre in output_list:
                 continue
                 
-            success, click_loc, conf = self.find_icon(k, v, lushi, image)
+            success, click_loc, conf = self.find_icon(k, v, rect, image)
             if success:
                 output_list[k] = (click_loc, conf)
                 if pre:
                     output_list[pre] = (click_loc, conf)
 
-        return output_list, lushi
+        return output_list, rect
 
-    def find_icon(self, k, icon, lushi, image):
+    def find_icon(self, k, icon, rect, image):
         success, X, Y, conf = find_icon_location(k, image, icon)
         if success:
-            click_loc = (X + lushi[0], Y + lushi[1])
+            click_loc = (X + rect[0], Y + rect[1])
         else:
             click_loc = None
         return success, click_loc, conf
