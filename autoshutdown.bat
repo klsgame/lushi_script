@@ -1,6 +1,6 @@
 @echo off
 :start
-%systemroot%\system32\shutdown -f -s -t 150
+%systemroot%\system32\shutdown -f -s -t 9150
 cls
 :yn
 set /p word=输入Y取消关机，输入N退出：

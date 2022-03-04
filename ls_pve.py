@@ -163,7 +163,7 @@ x_click = lambda pos=None, y=None, **kwgs: pyautogui.click(rect[0] + _tp(pos, y)
 
 class Agent:
 
-    def __init__(self, team_id, heros_id, skills_id, targets_id, hero_cnt, while_delay):
+    def __init__(self, team_id, heros_id, skills_id, targets_id, hero_cnt, while_delay, hh_delay):
         self.icons = {}
         imgs = [img for img in os.listdir('imgs') if img.endswith('.png')]
         for img in imgs:
@@ -171,6 +171,7 @@ class Agent:
             v = cv2.cvtColor(cv2.imread(os.path.join('imgs', img)), cv2.COLOR_BGR2GRAY)
             self.icons[k] = v
 
+        self.hh_delay = hh_delay
         self.team_id = team_id
         self.heros_id = heros_id
         self.skills_id = skills_id
@@ -179,7 +180,7 @@ class Agent:
         self.while_delay = while_delay
 
         self.hero_relative_locs = [
-            (692, 632),
+            (699, 632),
             (807, 641),
             (943, 641)
         ]
@@ -284,6 +285,9 @@ class Agent:
         x_click(self.treasure_collect_loc)
 
     def do_skill_select(self):
+        if self.hh_delay > 0:
+            time.sleep(self.hh_delay)
+            
         time.sleep(0.2)
         if self.hero_cnt == 1:
             mid_hero_loc = self.hero_relative_locs[1]
@@ -717,15 +721,17 @@ def main():
     with open('config.txt', 'r', encoding='utf-8') as f:
         lines = f.readlines()
 
-    team_id, heros_id, skills_id, targets_id, while_delay, delay = lines
+    team_id, heros_id, skills_id, targets_id, while_delay, delay, hh_delay = lines
 
     heros_id = [int(s.strip()) for s in heros_id.strip().split(' ') if not s.startswith('#')]
     skills_id = [int(s.strip()) for s in skills_id.strip().split(' ') if not s.startswith('#')]
     targets_id = [int(s.strip()) for s in targets_id.strip().split(' ') if not s.startswith('#')]
     team_id, hero_cnt = [int(s.strip()) for s in team_id.strip().split(' ') if not s.startswith('#')]
+    
     while_delay = float(while_delay.split('#')[0].strip())
     delay = float(delay.split('#')[0].strip())
-
+    hh_delay = float(hh_delay.split('#')[0].strip())
+    
     print(_t(), 'heros_id:', heros_id, 'skills_id:', skills_id)
     assert (len(skills_id) == 3 and len(targets_id) == 3 and len(heros_id) == 3)
     assert (team_id in [0, 1, 2] and hero_cnt <= 6)
@@ -733,7 +739,7 @@ def main():
     pyautogui.PAUSE = delay
 
     agent = Agent(team_id=team_id, heros_id=heros_id, skills_id=skills_id, targets_id=targets_id, hero_cnt=hero_cnt,
-                  while_delay=while_delay)
+                  while_delay=while_delay, hh_delay=hh_delay)
     agent.run()
 
 
