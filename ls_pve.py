@@ -30,7 +30,21 @@ def _t(tag='info', now=None):
 
     return ret + ' [' + tag.upper() + ']'
 
+def _tt(fmt='%Y-%m-%d %H:%M:%S.%f', fix=True, now=None):
+    now = now if now else datetime.datetime.now()
+    tmp = now.strftime(fmt)
+    if not fix:
+        return tmp
+    
+    arr = tmp.split('.', 2)
+    if len(arr) == 2:
+        ms = int(arr[1] + '0' * (6 - len(arr[1])))
+        ret = arr[0] + '.' + '{:0>3d}'.format(int(ms / 1000))
+    else:
+        ret = arr[0] + '.000'
 
+    return ret
+    
 def find_lushi_window(acc):
     global G_HWND, G_RECT
 
@@ -47,9 +61,9 @@ def find_lushi_window(acc):
     t_rect = G_RECT if G_RECT else win32gui.GetWindowPlacement(hwnd)[-1]
     G_RECT = t_rect
 
-    image = ImageGrab.grab(t_rect)
-    image = cv2.cvtColor(np.array(image), cv2.COLOR_BGR2GRAY)
-    return t_rect, image
+    _image = ImageGrab.grab(t_rect)
+    image = cv2.cvtColor(np.array(_image), cv2.COLOR_BGR2GRAY)
+    return t_rect, image, _image
 
 
 def set_top_window(title='炉石传说'):
@@ -243,6 +257,9 @@ class Agent:
         self.acc, self.state, self.no, self.reward_count = 0, '', '', 5
         self.empty_acc, self.member_ready_acc, self.buf_ready_acc = 0, 0, 0
 
+        self.state = 'init'
+
+        
     def give_up(self):
         time.sleep(0.6)
         x_click(self.check_team_loc)
@@ -326,6 +343,7 @@ class Agent:
         
                     
     def run(self):
+        # self._check_image()
         # self.run_pve_break(no='2-6', for_jy=False)
         self.run_pve_full(no='1-1', reward_count=3, max_member_ready=99, max_buf_ready=99, ext_reward=True)
 
@@ -347,6 +365,8 @@ class Agent:
         self.acc, self.state, self.no, self.reward_count = 0, '', no, reward_count
         delay, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, is_first = 0.5, 0, 0, 0, True
         self.shutdown_acc = 0
+        self._check_image()
+        
         while True:
             time.sleep((np.random.rand() + delay) if delay > 0 else 0.3)
             states, rect = self.check_state(ext_buf = self.state != 'battle', ext_reward = ext_reward)
@@ -361,10 +381,12 @@ class Agent:
                 self.give_up()
                 set_top_window()
                 self.shutdown_acc += 1
+                if self.shutdown_acc >= 2:
+                    x_click(self.start_battle_loc)
                 if self.shutdown_acc >= 5:
+                    self._check_image()
                     self.do_shutdown()
                     break
-                    
                 continue
                     
             if 'boom' in states or 'blue_portal' in states or 'destroy' in states:
@@ -539,6 +561,7 @@ class Agent:
                     r_click()
 
                 time.sleep(0.3)
+                self._check_image()
                 x_moveTo(self.rewards_cfm_loc)
                 r_click()
                 [x_click(self.start_game_relative_loc) for _ in range(5)]
@@ -652,6 +675,24 @@ class Agent:
             time.sleep(10) if 'start_game' in states else time.sleep(self.while_delay)
 
     def check_state(self, ext_buf=False, ext_sp=None, ext_reward=None):
+        try:
+            return self._check_state(ext_buf, ext_sp, ext_reward)
+        except KeyboardInterrupt:
+            raise
+        except:
+            self.do_shutdown()
+            raise
+
+    def _check_image(self, pp='tmp'):
+        rect, image, _image = find_lushi_window(self.acc)
+        if image is None:
+            return
+
+        fname = os.path.join(os.getcwd(), pp, '[%d] %s [%s].png' % (os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False), self.state or 'unknown'))
+        print(_t(), 'fname:', fname)
+        _image.save(fname)
+        
+    def _check_state(self, ext_buf, ext_sp, ext_reward):
         self.acc += 1
 
         if ext_sp is None:
@@ -660,7 +701,7 @@ class Agent:
         if ext_reward is None:
             ext_reward = self.no == '1-1'
             
-        rect, image = find_lushi_window(self.acc)
+        rect, image, _image = find_lushi_window(self.acc)
         if image is None:
             return {}, rect
             
