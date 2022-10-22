@@ -1,7 +1,9 @@
+#-*- coding: utf-8 -*-
+
+import sys, os, datetime, time
+
 import pyautogui
 import cv2
-import time
-import subprocess
 
 from PIL import ImageGrab, Image
 import numpy as np
@@ -10,9 +12,6 @@ import win32api
 from winguiauto import findTopWindow
 import win32gui
 import win32con
-import os
-
-import datetime
 
 G_HWND = None
 G_RECT = None
@@ -121,6 +120,7 @@ G_CACHE_MAP = {
     'start_point': d_range,
     'team_lock': d_range,
     'team_list': d_range,
+    'map_btn': d_range,
     'final_reward': d_range,
 }
 
@@ -257,9 +257,8 @@ class Agent:
         self.acc, self.state, self.no, self.reward_count = 0, '', '', 5
         self.empty_acc, self.member_ready_acc, self.buf_ready_acc = 0, 0, 0
 
-        self.state = 'init'
+        self.member_ready_loc = (1310, 449)
 
-        
     def give_up(self):
         time.sleep(0.6)
         x_click(self.check_team_loc)
@@ -340,7 +339,7 @@ class Agent:
     def do_shutdown(self):
         autoshutdown = os.path.join(os.getcwd(), 'autoshutdown.bat')
         p = os.system("cmd.exe /c " + autoshutdown)
-        
+        time.sleep(10)
                     
     def run(self):
         # self._check_image()
@@ -365,7 +364,8 @@ class Agent:
         self.acc, self.state, self.no, self.reward_count = 0, '', no, reward_count
         delay, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, is_first = 0.5, 0, 0, 0, True
         self.shutdown_acc = 0
-        self._check_image()
+        
+        self._check_image('init')
         
         while True:
             time.sleep((np.random.rand() + delay) if delay > 0 else 0.3)
@@ -378,19 +378,26 @@ class Agent:
 
             if self.empty_acc >= 10:
                 self.empty_acc = 0
-                self.give_up()
+                # self.give_up()
                 set_top_window()
                 self.shutdown_acc += 1
+                self._check_image('empty-%d' % (self.shutdown_acc, ))
                 if self.shutdown_acc >= 2:
-                    x_click(self.start_battle_loc)
+                    x_click(self.enemy_mid_location)
+                    time.sleep(0.8)
+                    x_click(self.member_ready_loc)
                 if self.shutdown_acc >= 5:
-                    self._check_image()
+                    self._check_image('shutdown')
                     self.do_shutdown()
                     break
                 continue
-                    
+
             if 'boom' in states or 'blue_portal' in states or 'destroy' in states:
-                self.give_up()
+                # self.give_up()
+                continue
+
+            if 'map_btn' in states:
+                r_click(states['map_btn'][0])
                 continue
                 
             map_not_ready = False
@@ -418,7 +425,7 @@ class Agent:
                         
                         if self.buf_ready_acc >= max_buf_ready:
                             time.sleep(0.9)
-                            self.give_up()
+                            # self.give_up()
                             
                         map_not_ready = False
                         break
@@ -437,7 +444,7 @@ class Agent:
                     continue
 
                 if 'boom' in new_states or 'blue_portal' in new_states or 'destroy' in new_states:
-                    self.give_up()
+                    # self.give_up()
                     continue
 
                 if 'stranger' in new_states:
@@ -445,7 +452,7 @@ class Agent:
                     time.sleep(0.3)
                     self.do_select_stranger()
                     time.sleep(0.9)
-                    self.give_up()
+                    # self.give_up()
                     continue
                     
                 for b_icon in ['b-sp', 'b-fs', 'b-zs', 'b-ck', 'b-fh', 'b-try']:
@@ -468,7 +475,7 @@ class Agent:
                         
                         if self.buf_ready_acc >= max_buf_ready:
                             time.sleep(0.9)
-                            self.give_up()
+                            # self.give_up()
 
                         has_break = False
                         break
@@ -476,7 +483,7 @@ class Agent:
 
                 if self.member_ready_acc >= max_member_ready or self.buf_ready_acc >= max_buf_ready:
                     time.sleep(0.9)
-                    self.give_up()
+                    # self.give_up()
                     continue
 
                     
@@ -485,7 +492,7 @@ class Agent:
                     r_click()
                     if not ext_reward:
                         time.sleep(0.9)
-                        self.give_up()
+                        # self.give_up()
                     continue
 
             if self.no in states:
@@ -517,6 +524,7 @@ class Agent:
                 
                 x_click(self.team_loc)
                 if 'team_lock' in states:
+                    self._check_image('team')
                     r_click(states['team_lock'][0])
                 x_click(self.start_team_loc)
                 time.sleep(0.3)
@@ -533,6 +541,7 @@ class Agent:
             if 'battle_ready' in states:
                 self.state = 'battle'
                 r_click(states['battle_ready'][0])
+                self._battle_ready = states['battle_ready'][0]
                 continue
 
             if 'treasure_list' in states or 'treasure_replace' in states:
@@ -541,7 +550,7 @@ class Agent:
 
                 if self.member_ready_acc >= max_member_ready + 1 or self.buf_ready_acc >= max_buf_ready:
                     time.sleep(0.9)
-                    self.give_up()
+                    # self.give_up()
                     
                 continue
 
@@ -561,17 +570,20 @@ class Agent:
                     r_click()
 
                 time.sleep(0.3)
-                self._check_image()
+                self._check_image('rewards')
                 x_moveTo(self.rewards_cfm_loc)
                 r_click()
-                [x_click(self.start_game_relative_loc) for _ in range(5)]
-
+                
                 self.member_ready_acc = 0
                 self.buf_ready_acc = 0
                 self.shutdown_acc = 0
                 
                 time.sleep(0.3)
                 x_click(self.cfm_done_loc)
+
+                time.sleep(3.3)
+                [x_click(self.start_game_relative_loc) for _ in range(5)]
+                
                 continue
 
             if 'cfm_done' in states:
@@ -683,12 +695,12 @@ class Agent:
             self.do_shutdown()
             raise
 
-    def _check_image(self, pp='tmp'):
+    def _check_image(self, tag='', pp='tmp'):
         rect, image, _image = find_lushi_window(self.acc)
         if image is None:
             return
 
-        fname = os.path.join(os.getcwd(), pp, '[%d] %s [%s].png' % (os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False), self.state or 'unknown'))
+        fname = os.path.join(os.getcwd(), pp, '[%d] %s [%s].png' % (os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False), tag or 'unknown'))
         print(_t(), 'fname:', fname)
         _image.save(fname)
         
@@ -718,7 +730,7 @@ class Agent:
         ext_keys = (['b-sp', ] + ext_keys + ['stranger', 'blue_portal', 'destroy', 'boom']) if ext_sp else ext_keys
         
         try_keys = (try_keys + ['final_reward', 'final_reward2', 'cfm_done', 'cfm_reward']) if ext_reward else try_keys
-        base_keys = ['start_game', 'map_not_ready', 'start_point']
+        base_keys = ['start_game', 'map_not_ready', 'start_point', 'map_btn']
         base_keys = (base_keys + ['team_lock', 'team_list']) if self.acc < 90 else base_keys
 
         need_keys = try_keys + base_keys + ext_keys
@@ -756,8 +768,29 @@ class Agent:
         return success, click_loc, conf
 
 
+class Logger(object):
+    def __init__(self, filename="default.log"):
+        self.terminal = sys.stdout
+        self.log = open(filename, "w", encoding="utf-8")
+        
+    def write(self, message):
+        self.terminal.write(message)
+        if self.log:
+            self.log.write(message)
+            self.log.flush()
+        
+    def flush(self):
+        pass
+        
+    def reset(self):
+        self.log.flush()
+        self.log.close()
+        self.log = None
+
 def main():
-    pyautogui.confirm(text="请启动炉石，将炉石调至窗口模式，分辨率设为1600x900，画质设为高 参考 config.txt 修改配置文件")
+    tip = "请启动炉石，将炉石调至窗口模式，分辨率设为1600x900，画质设为高 参考 config.txt 修改配置文件"
+    if not pyautogui.confirm(text=tip):
+        return
 
     with open('config.txt', 'r', encoding='utf-8') as f:
         lines = f.readlines()
@@ -773,15 +806,21 @@ def main():
     delay = float(delay.split('#')[0].strip())
     hh_delay = float(hh_delay.split('#')[0].strip())
     
-    print(_t(), 'heros_id:', heros_id, 'skills_id:', skills_id)
-    assert (len(skills_id) == 3 and len(targets_id) == 3 and len(heros_id) == 3)
-    assert (team_id in [0, 1, 2] and hero_cnt <= 6)
+    assert (len(skills_id) == 3 and len(targets_id) == 3 and len(heros_id) == 3), 'len(skills_id), len(targets_id), len(heros_id) == 3'
+    assert (team_id in [0, 1, 2] and hero_cnt <= 6), 'team_id in [0, 1, 2] and hero_cnt <= 6'
 
     pyautogui.PAUSE = delay
-
     agent = Agent(team_id=team_id, heros_id=heros_id, skills_id=skills_id, targets_id=targets_id, hero_cnt=hero_cnt,
-                  while_delay=while_delay, hh_delay=hh_delay)
-    agent.run()
+              while_delay=while_delay, hh_delay=hh_delay)
+              
+    try:
+        lf = os.path.join(os.getcwd(), 'logs', '[%d] %s.log' % (os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False)))
+        sys.stdout = Logger(lf)
+
+        print(_t(), 'heros_id:', heros_id, 'skills_id:', skills_id)
+        agent.run()
+    finally:
+        sys.stdout.reset()
 
 
 if __name__ == '__main__':
