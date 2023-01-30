@@ -7,6 +7,7 @@ import cv2
 
 from PIL import ImageGrab, Image
 import numpy as np
+from urllib import request
 
 import win32api
 from winguiauto import findTopWindow
@@ -55,7 +56,7 @@ def find_lushi_window(acc):
         G_HWND = hwnd if hwnd else None
 
     if not G_HWND:
-        return G_RECT, None
+        return G_RECT, None, None
 
     t_rect = G_RECT if G_RECT else win32gui.GetWindowPlacement(hwnd)[-1]
     G_RECT = t_rect
@@ -105,6 +106,8 @@ G_CACHE_MAP = {
     'skill_select': d_range,
     'visitor_list': d_range,
     '1-1': d_range,
+    '2-1': d_range,
+    '2-1': d_range,
     '2-5': d_range,
     '2-6': d_range,
     'f-fh': d_range,
@@ -133,7 +136,9 @@ def find_icon_location(k, lushi, icon, kk=0.8699):
     elif k in G_ICON_RANGE_STATIC:
         p1, p2 = G_ICON_RANGE_STATIC[k]
         lushi = lushi[p1[1]:p2[1], p1[0]:p2[0]]
-        
+    else:
+        print(_t('warn'), 'NO CACHE key: %s kk: %f' % (k, kk))
+
     result = cv2.matchTemplate(lushi, icon, cv2.TM_CCOEFF_NORMED)
     (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(result)
     if k == 'b-try' or k == 'not_ready_dots' or k == 'skill_select':
@@ -163,6 +168,10 @@ def find_icon_location(k, lushi, icon, kk=0.8699):
     else:
         return False, None, None, maxVal
 
+def http_get(url):
+    response = request.urlopen(url)
+    return response.status, response.read()
+
 
 rect = [0, 0]
 _tp = lambda pos=None, y=None: pos if isinstance(pos, (tuple, list)) else (pos, y)
@@ -185,67 +194,53 @@ class Agent:
             v = cv2.cvtColor(cv2.imread(os.path.join('imgs', img)), cv2.COLOR_BGR2GRAY)
             self.icons[k] = v
 
-        self.hh_delay = hh_delay
-        self.team_id = team_id
-        self.heros_id = heros_id
-        self.skills_id = skills_id
-        self.targets_id = targets_id
-        self.hero_cnt = hero_cnt
-        self.while_delay = while_delay
-
+        self.team_id, self.heros_id, self.skills_id, self.targets_id = team_id, heros_id, skills_id, targets_id
+        self.hh_delay, self.hero_cnt, self.while_delay = hh_delay, hero_cnt, while_delay
+        
+        self.first_check, self.second_check = [], []
+        self.acc, self.state, self.no, self.reward_count = 0, '', '', 5
+        self.empty_acc, self.member_ready_acc, self.buf_ready_acc = 0, 0, 0
+        
         self.hero_relative_locs = [
             (699, 632),
             (807, 641),
             (943, 641)
         ]
-
         self.enemy_mid_location = (850, 285)
-
         self.skill_relative_locs = [
             (653, 447),
             (801, 453),
             (963, 459),
         ]
-
         self.treasure_locs = [
             (707, 376), (959, 376), (1204, 376)
         ]
         self.treasure_collect_loc = (968, 765)
-
         self.visitor_locs = [
             (544, 426), (790, 420), (1042, 416)
         ]
         self.visitor_choose_loc = (791, 688)
-
         self.members_loc = (622, 1000, 900)
-
         self.drag2loc = (1213, 564)
-
         self.locs = {
             'left': [(452, 464), (558, 461), (473, 465)],
             'right': [(777, 478), (800, 459), (903, 469)]
         }
-
         self.finial_reward_locs = [
             (660, 314), (554, 687), (1010, 794), (1117, 405), (806, 525)
         ]
-
         self.select_travel_relative_loc = (1090, 674)
-
         self.team_locations = [(374, 324), (604, 330), (837, 324)]
         self.team_loc = self.team_locations[team_id]
         self.start_team_loc = (1190, 797)
         self.start_game_relative_loc = (1240, 742)
         # self.start_point_relative_loc = (646, 712)
-
         self.options_loc = (1579, 920)
         self.surrender_loc = (815, 363)
-
         self.start_battle_loc = (1327, 454)
         self.check_team_loc = (674, 885 - 5)
         self.give_up_loc = (929, 706 - 5)
         self.give_up_cfm_loc = (712, 560 - 5)
-
         self.rewards_locs = {
             5: [(608, 706), (1034, 720), (1117, 371), (846, 311), (541, 430)],
             4: [(660, 314), (554, 687), (1010, 794), (1117, 405)],
@@ -253,10 +248,6 @@ class Agent:
         }
         self.rewards_cfm_loc = (806, 525)
         self.cfm_done_loc = (790, 766)
-
-        self.acc, self.state, self.no, self.reward_count = 0, '', '', 5
-        self.empty_acc, self.member_ready_acc, self.buf_ready_acc = 0, 0, 0
-
         self.member_ready_loc = (1310, 449)
 
     def give_up(self):
@@ -266,7 +257,9 @@ class Agent:
         x_click(self.give_up_loc)
         time.sleep(0.2)
         x_click(self.give_up_cfm_loc)
-
+        time.sleep(0.6)
+        self._check_image('give_up_rewards')
+                
     def esc_give_up(self):
         x_click(self.options_loc)
         time.sleep(0.1)
@@ -322,8 +315,11 @@ class Agent:
         x_click(first_hero_loc)
         for idx, skill_id, target_id in zip([0, 1, 2], self.skills_id, self.targets_id):
             time.sleep(0.2)
+            
+            time.sleep(0.3) if idx == 2 else None
             x_click(self.skill_relative_locs[skill_id])
-
+            time.sleep(0.2) if idx == 2 else None
+            
             if target_id != -1:
                 x_click(self.enemy_mid_location)
 
@@ -337,14 +333,16 @@ class Agent:
         x_click(self.visitor_choose_loc)
 
     def do_shutdown(self):
+        http_get('https://sctapi.ftqq.com/SCT193913TUNx0lH9vKbmWEsHHQuj7E9DX.send?title=shutdown_' + _tt('%Y-%m-%d_%H_%M_%S', False))
         autoshutdown = os.path.join(os.getcwd(), 'autoshutdown.bat')
         p = os.system("cmd.exe /c " + autoshutdown)
-        time.sleep(10)
-                    
+        time.sleep(1)
+
     def run(self):
+        # http_get('https://sctapi.ftqq.com/SCT193913TUNx0lH9vKbmWEsHHQuj7E9DX.send?title=run_pve_break_' + _tt('%Y-%m-%d_%H_%M_%S', False))
         # self._check_image()
-        # self.run_pve_break(no='2-6', for_jy=False)
-        self.run_pve_full(no='1-1', reward_count=3, max_member_ready=99, max_buf_ready=99, ext_reward=True)
+        self.run_pve_break(no='2-1', for_jy=False)
+        # self.run_pve_full(no='1-1', reward_count=3, max_member_ready=99, max_buf_ready=99, ext_reward=True)
 
     def run_test(self):
         global rect
@@ -361,11 +359,11 @@ class Agent:
 
         self.while_delay = self.while_delay / 3.0
         
-        self.acc, self.state, self.no, self.reward_count = 0, '', no, reward_count
+        self.acc, self.state, self.no, self.reward_count = 0, 'init', no, reward_count
         delay, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, is_first = 0.5, 0, 0, 0, True
         self.shutdown_acc = 0
         
-        self._check_image('init')
+        self._check_image('pve_full_init')
         
         while True:
             time.sleep((np.random.rand() + delay) if delay > 0 else 0.3)
@@ -598,11 +596,16 @@ class Agent:
             r_click()
             time.sleep(10) if 'start_game' in states else time.sleep(self.while_delay)
 
-    def run_pve_break(self, no='2-5', for_jy=False):
+    def run_pve_break(self, no='2-2', for_jy=False):
         global rect
 
-        self.acc, self.state, self.no = 0, '', no
+        self.acc, self.state, self.no = 0, 'init', no
         delay, self.empty_acc, is_first = 0.5, 0, True
+
+        self.shutdown_acc = 0
+        
+        self._check_image('pve_break_init')
+        
         last_states = {}
         while True:
             time.sleep((np.random.rand() + delay) if delay > 0 else 0.3)
@@ -611,11 +614,22 @@ class Agent:
             delay = (delay + 0.1) if not states else delay
             self.empty_acc = (self.empty_acc + 1) if not states or 'cfm_done' in states else 0
             delay = delay if delay < 3 else 3
-            print(_t(), 'states:', states, self.empty_acc, round(delay, 2))
+            print(_t(), self.state + ':', states, self.empty_acc, round(delay, 2))
 
             if self.empty_acc >= 10:
                 self.empty_acc = 0
-                self.give_up()
+                # self.give_up()
+                set_top_window()
+                self.shutdown_acc += 1
+                self._check_image('empty-%d' % (self.shutdown_acc, ))
+                if self.shutdown_acc >= 2:
+                    x_click(self.enemy_mid_location)
+                    time.sleep(0.8)
+                    x_click(self.member_ready_loc)
+                if self.shutdown_acc >= 5:
+                    self._check_image('shutdown')
+                    self.do_shutdown()
+                    break
                 continue
 
             if 'map_not_ready' in states and 'start_point' not in states:
@@ -625,7 +639,7 @@ class Agent:
 
                 time.sleep(1.5)
                 new_states, rect = self.check_state()
-                print(_t(), 'states_:', new_states, self.empty_acc, round(delay, 2))
+                print(_t(), self.state + '_:', states, self.empty_acc, round(delay, 2))
 
                 x_moveTo(self.start_game_relative_loc)
                 r_click()
@@ -633,20 +647,26 @@ class Agent:
                 if 'start_game' in new_states or not new_states:
                     time.sleep(10) if 'start_game' in new_states else time.sleep(self.while_delay)
                 else:
-                    self.give_up()
+                    # self.give_up()
                     continue
 
             last_states = states
 
             if self.no in states:
+                self.state = 'map'
                 r_click(states[self.no][0])
                 x_click(self.start_game_relative_loc)
                 if not is_first:
                     self.mutil_click_start()
                 is_first = False
+                self.shutdown_acc = 0
                 continue
-
+                
+            if 'start_point' in states:
+                self.state = 'map'
+                    
             if 'team_list' in states:
+                self.state = 'map'
                 x_click(self.team_loc)
                 if 'team_lock' in states:
                     r_click(states['team_lock'][0])
@@ -655,16 +675,20 @@ class Agent:
                 continue
 
             if 'member_ready' in states:
+                self.state = 'battle'
                 self.do_use_hero()
                 r_click(states['member_ready'][0])
                 delay = -0.5
                 continue
 
             if 'battle_ready' in states:
+                self.state = 'battle'
                 r_click(states['battle_ready'][0])
                 continue
 
             if 'treasure_list' in states or 'treasure_replace' in states:
+                self.shutdown_acc = 0
+                self.state = 'map'
                 self.do_treasure_list()
                 time.sleep(0.9)
                 self.give_up()
@@ -672,6 +696,7 @@ class Agent:
                 continue
 
             if 'skill_select' in states or 'not_ready_dots' in states:
+                self.state = 'battle'
                 x_click(self.start_game_relative_loc)
                 time.sleep(0.2)
                 if for_jy:
@@ -703,21 +728,15 @@ class Agent:
         fname = os.path.join(os.getcwd(), pp, '[%d] %s [%s].png' % (os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False), tag or 'unknown'))
         print(_t(), 'fname:', fname)
         _image.save(fname)
-        
-    def _check_state(self, ext_buf, ext_sp, ext_reward):
-        self.acc += 1
 
+    def _build_check_keys(self, acc, ext_buf=False, ext_sp=None, ext_reward=None, as_fast=True):
         if ext_sp is None:
             ext_sp = self.no != '1-1' and ext_buf
 
         if ext_reward is None:
             ext_reward = self.no == '1-1'
+            as_fast = self.no == '2-1'
             
-        rect, image, _image = find_lushi_window(self.acc)
-        if image is None:
-            return {}, rect
-            
-        output_list = {}
         try_keys = ['battle_ready', 'member_ready', 'treasure_list', 'treasure_replace', 'skill_select', 'not_ready_dots', self.no]
         try_keys = (try_keys + ['visitor_list']) if ext_sp else try_keys
 
@@ -731,12 +750,28 @@ class Agent:
         
         try_keys = (try_keys + ['final_reward', 'final_reward2', 'cfm_done', 'cfm_reward']) if ext_reward else try_keys
         base_keys = ['start_game', 'map_not_ready', 'start_point', 'map_btn']
-        base_keys = (base_keys + ['team_lock', 'team_list']) if self.acc < 90 else base_keys
+        base_keys = (base_keys + ['team_lock', 'team_list']) if acc < 13 else base_keys
 
+        skips = ['treasure_replace', 'map_btn'] if as_fast else []
         need_keys = try_keys + base_keys + ext_keys
-        first_check = [(kk, self.icons[kk]) for kk in try_keys if kk in self.icons]
-        second_check = [(kk, self.icons[kk]) for kk in need_keys if kk not in first_check and kk in self.icons]
+        first_check = [(kk, self.icons[kk]) for kk in try_keys if kk in self.icons and kk not in skips]
+        second_check = [(kk, self.icons[kk]) for kk in need_keys if kk in self.icons and kk not in try_keys and kk not in skips]
+        return first_check, second_check
+        
+    def _check_state(self, ext_buf=False, ext_sp=None, ext_reward=None):
+        self.acc += 1
 
+        rect, image, _image = find_lushi_window(self.acc)
+        if image is None:
+            return {}, rect
+
+        first_check, second_check = self._build_check_keys(self.acc, ext_buf, ext_sp, ext_reward) if self.acc % 13 == 1 else \
+                                        (self.first_check, self.second_check)
+        if not first_check or not second_check:
+            first_check, second_check = self._build_check_keys(self.acc, ext_buf, ext_sp, ext_reward)
+        self.first_check, self.second_check = first_check, second_check
+        
+        output_list = {}
         for k, v in first_check:
             success, click_loc, conf = self.find_icon(k, v, rect, image)
             if success:
