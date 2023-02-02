@@ -169,8 +169,11 @@ def find_icon_location(k, lushi, icon, kk=0.8699):
         return False, None, None, maxVal
 
 def http_get(url):
-    response = request.urlopen(url)
-    return response.status, response.read()
+    try:
+        response = request.urlopen(url)
+        return response.status, response.read()
+    except Exception as ex:
+        return 500, 'Err: %r => %s' % (type(ex), ex)
 
 
 rect = [0, 0]
@@ -318,11 +321,13 @@ class Agent:
             
             time.sleep(0.3) if idx == 2 else None
             x_click(self.skill_relative_locs[skill_id])
-            time.sleep(0.2) if idx == 2 else None
             
             if target_id != -1:
+                time.sleep(0.1)
                 x_click(self.enemy_mid_location)
+                time.sleep(0.1)
 
+            time.sleep(0.4) if idx == 2 else None
             if self.hero_cnt == 2 and idx == 1:
                 break
 
@@ -333,16 +338,22 @@ class Agent:
         x_click(self.visitor_choose_loc)
 
     def do_shutdown(self):
+        print(_t(), 'acc:', self.acc, ', do_shutdown:', self.shutdown_acc)
         http_get('https://sctapi.ftqq.com/SCT193913TUNx0lH9vKbmWEsHHQuj7E9DX.send?title=shutdown_' + _tt('%Y-%m-%d_%H_%M_%S', False))
         autoshutdown = os.path.join(os.getcwd(), 'autoshutdown.bat')
         p = os.system("cmd.exe /c " + autoshutdown)
         time.sleep(1)
 
-    def run(self):
+    def run(self, no=None):
         # http_get('https://sctapi.ftqq.com/SCT193913TUNx0lH9vKbmWEsHHQuj7E9DX.send?title=run_pve_break_' + _tt('%Y-%m-%d_%H_%M_%S', False))
         # self._check_image()
-        self.run_pve_break(no='2-1', for_jy=False)
-        # self.run_pve_full(no='1-1', reward_count=3, max_member_ready=99, max_buf_ready=99, ext_reward=True)
+        if no and no.startswith('2-'):
+            self.run_pve_break(no, for_jy=False)
+        elif no and no.startswith('1-'):
+            self.run_pve_full(no, reward_count=3, max_member_ready=99, max_buf_ready=99, ext_reward=True)
+        else:
+            self.run_pve_break(no or '2-6', for_jy=False)
+            # self.run_pve_full(no or '1-1', reward_count=3, max_member_ready=99, max_buf_ready=99, ext_reward=True)
 
     def run_test(self):
         global rect
@@ -357,6 +368,7 @@ class Agent:
     def run_pve_full(self, no='2-6', reward_count=3, max_member_ready=2, max_buf_ready=3, ext_reward=False):
         global rect
 
+        print(_t(), 'run_pve_full no:', no)
         self.while_delay = self.while_delay / 3.0
         
         self.acc, self.state, self.no, self.reward_count = 0, 'init', no, reward_count
@@ -374,7 +386,7 @@ class Agent:
             delay = delay if delay < 3 else 3
             print(_t(), self.state + ':', states, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, round(delay, 2))
 
-            if self.empty_acc >= 10:
+            if self.empty_acc >= 15:
                 self.empty_acc = 0
                 # self.give_up()
                 set_top_window()
@@ -596,9 +608,10 @@ class Agent:
             r_click()
             time.sleep(10) if 'start_game' in states else time.sleep(self.while_delay)
 
-    def run_pve_break(self, no='2-2', for_jy=False):
+    def run_pve_break(self, no='2-6', for_jy=False):
         global rect
 
+        print(_t(), 'run_pve_break no:', no)
         self.acc, self.state, self.no = 0, 'init', no
         delay, self.empty_acc, is_first = 0.5, 0, True
 
@@ -616,7 +629,7 @@ class Agent:
             delay = delay if delay < 3 else 3
             print(_t(), self.state + ':', states, self.empty_acc, round(delay, 2))
 
-            if self.empty_acc >= 10:
+            if self.empty_acc >= 15:
                 self.empty_acc = 0
                 # self.give_up()
                 set_top_window()
@@ -716,7 +729,8 @@ class Agent:
             return self._check_state(ext_buf, ext_sp, ext_reward)
         except KeyboardInterrupt:
             raise
-        except:
+        except Exception as ex:
+            print(_t(), 'check_state acc: %d, err: %r' % (self.acc, ex))
             self.do_shutdown()
             raise
 
@@ -726,7 +740,7 @@ class Agent:
             return
 
         fname = os.path.join(os.getcwd(), pp, '[%d] %s [%s].png' % (os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False), tag or 'unknown'))
-        print(_t(), 'fname:', fname)
+        print(_t(), 'acc:', self.acc, ', fname:', fname)
         _image.save(fname)
 
     def _build_check_keys(self, acc, ext_buf=False, ext_sp=None, ext_reward=None, as_fast=True):
@@ -735,7 +749,7 @@ class Agent:
 
         if ext_reward is None:
             ext_reward = self.no == '1-1'
-            as_fast = self.no == '2-1'
+            as_fast = self.no == '2-1' or self.no == '2-2' or self.no == '2-5' or self.no == '2-6'
             
         try_keys = ['battle_ready', 'member_ready', 'treasure_list', 'treasure_replace', 'skill_select', 'not_ready_dots', self.no]
         try_keys = (try_keys + ['visitor_list']) if ext_sp else try_keys
@@ -750,7 +764,7 @@ class Agent:
         
         try_keys = (try_keys + ['final_reward', 'final_reward2', 'cfm_done', 'cfm_reward']) if ext_reward else try_keys
         base_keys = ['start_game', 'map_not_ready', 'start_point', 'map_btn']
-        base_keys = (base_keys + ['team_lock', 'team_list']) if acc < 13 else base_keys
+        base_keys = (base_keys + ['team_lock', 'team_list']) if acc < 20 else base_keys
 
         skips = ['treasure_replace', 'map_btn'] if as_fast else []
         need_keys = try_keys + base_keys + ext_keys
@@ -765,9 +779,9 @@ class Agent:
         if image is None:
             return {}, rect
 
-        first_check, second_check = self._build_check_keys(self.acc, ext_buf, ext_sp, ext_reward) if self.acc % 13 == 1 else \
+        first_check, second_check = self._build_check_keys(self.acc, ext_buf, ext_sp, ext_reward) if self.acc % 100 == 1 or self.acc < 30 else \
                                         (self.first_check, self.second_check)
-        if not first_check or not second_check:
+        if not first_check and not second_check:
             first_check, second_check = self._build_check_keys(self.acc, ext_buf, ext_sp, ext_reward)
         self.first_check, self.second_check = first_check, second_check
         
@@ -830,16 +844,19 @@ def main():
     with open('config.txt', 'r', encoding='utf-8') as f:
         lines = f.readlines()
 
-    team_id, heros_id, skills_id, targets_id, while_delay, delay, hh_delay = lines
+    assert len(lines) >= 7, 'must has 7 lines: team_id, heros_id, skills_id, targets_id, while_delay, delay, hh_delay'
+    team_id, heros_id, skills_id, targets_id, while_delay, delay, hh_delay = lines[:7]
 
-    heros_id = [int(s.strip()) for s in heros_id.strip().split(' ') if not s.startswith('#')]
-    skills_id = [int(s.strip()) for s in skills_id.strip().split(' ') if not s.startswith('#')]
-    targets_id = [int(s.strip()) for s in targets_id.strip().split(' ') if not s.startswith('#')]
-    team_id, hero_cnt = [int(s.strip()) for s in team_id.strip().split(' ') if not s.startswith('#')]
+    heros_id = [int(s.strip()) for s in heros_id.split('#')[0].strip().split(' ')]
+    skills_id = [int(s.strip()) for s in skills_id.split('#')[0].strip().split(' ')]
+    targets_id = [int(s.strip()) for s in targets_id.split('#')[0].strip().split(' ')]
+    team_id, hero_cnt = [int(s.strip()) for s in team_id.split('#')[0].strip().split(' ')]
     
     while_delay = float(while_delay.split('#')[0].strip())
     delay = float(delay.split('#')[0].strip())
     hh_delay = float(hh_delay.split('#')[0].strip())
+
+    _no = (lines[7]).split('#')[0].strip() if len(lines) == 8 else None
     
     assert (len(skills_id) == 3 and len(targets_id) == 3 and len(heros_id) == 3), 'len(skills_id), len(targets_id), len(heros_id) == 3'
     assert (team_id in [0, 1, 2] and hero_cnt <= 6), 'team_id in [0, 1, 2] and hero_cnt <= 6'
@@ -852,8 +869,8 @@ def main():
         lf = os.path.join(os.getcwd(), 'logs', '[%d] %s.log' % (os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False)))
         sys.stdout = Logger(lf)
 
-        print(_t(), 'heros_id:', heros_id, 'skills_id:', skills_id)
-        agent.run()
+        print(_t(), 'heros_id:', heros_id, 'skills_id:', skills_id, 'no:', _no)
+        agent.run(_no)
     finally:
         sys.stdout.reset()
 
