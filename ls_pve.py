@@ -136,6 +136,9 @@ def find_icon_location(k, lushi, icon, kk=0.8699):
     elif k in G_ICON_RANGE_STATIC:
         p1, p2 = G_ICON_RANGE_STATIC[k]
         lushi = lushi[p1[1]:p2[1], p1[0]:p2[0]]
+    elif k == 'battle_ready' and 'member_ready' in G_ICON_RANGE_CACHE:
+        p1, p2 = (G_CACHE_MAP['member_ready'])(icon, G_ICON_RANGE_CACHE['member_ready'])
+        lushi = lushi[p1[1]:p2[1], p1[0]:p2[0]]
     else:
         print(_t('warn'), 'NO CACHE key: %s kk: %f' % (k, kk))
 
@@ -152,6 +155,8 @@ def find_icon_location(k, lushi, icon, kk=0.8699):
         tmp = (0, 0)
         if k in G_ICON_RANGE_CACHE:
             tmp = (G_CACHE_MAP[k])(icon, G_ICON_RANGE_CACHE[k])[0]
+        elif k == 'battle_ready' and 'member_ready' in G_ICON_RANGE_CACHE:
+            tmp = (G_CACHE_MAP['member_ready'])(icon, G_ICON_RANGE_CACHE['member_ready'])[0]
         elif k in G_ICON_RANGE_STATIC:
             tmp = G_ICON_RANGE_STATIC[k][0]
         
@@ -327,7 +332,7 @@ class Agent:
                 x_click(self.enemy_mid_location)
                 time.sleep(0.1)
 
-            time.sleep(0.4) if idx == 2 else None
+            time.sleep(0.6) if idx == 2 else None
             if self.hero_cnt == 2 and idx == 1:
                 break
 
