@@ -86,12 +86,31 @@ G_ICON_RANGE_CACHE = {}
 
 G_ICON_RANGE_STATIC = {
     'not_ready_dots': [(650, 530), (1020, 600)],
-    'final_reward2': [(490, 210), (1200, 770)],
+    'final_reward2': [(970, 555), (1200, 770)],
+    
+    'cfm_reward': [(789, 517), (879, 567)],
+    'cfm_done': [(728, 735), (848, 777)],
+    '1-1': [(299, 222), (503, 414)],
+    'team_lock': [(619, 534), (679, 576)],
+    'team_list': [(485, 128), (695, 182)],
+    
+    'map_not_ready': [(1155, 205), (1381, 433)],
+    'start_game': [(1192, 672), (1356, 790)],
+    'start_point': [(575, 638), (709, 742)],
+    
+    'member_ready': [(1237, 404), (1391, 478)],
+    'battle_ready': [(1237, 403), (1391, 481)],
+    'treasure_list': [(826, 166), (1082, 222)],
+    
+    'final_reward': [(543, 626), (649, 712)],
+    'skill_select': [(631, 463), (715, 521)],
+    'f-fh': [(1156, 485), (1390, 549)]
 }
-for t in ['b-fh', 'b-zs', 'b-fs', 'b-ck', 'b-try']:
-    G_ICON_RANGE_STATIC[t] = [(300, 370), (1010, 650)]
 
-def d_range(icon, pos, mw=20, mh=10):
+for t in ['b-fh', 'b-zs', 'b-fs', 'b-ck', 'b-try']:
+    G_ICON_RANGE_STATIC[t] = [(300, 380), (980, 550)]
+
+def d_range(icon, pos, mw=10, mh=5):
     w = icon.shape[1] // 2
     h = icon.shape[0] // 2
     ww = w if w < mw else mw
@@ -113,11 +132,11 @@ G_CACHE_MAP = {
     'f-fh': d_range,
     'f-buf': d_range,
     'stranger': d_range,
+    'cfm_done': d_range,
+    'cfm_reward': d_range,
     'blue_portal': d_range,
     'destroy': d_range,
     'boom': d_range,
-    'cfm_done': d_range,
-    'cfm_reward': d_range,
     'start_game': d_range,
     'map_not_ready': d_range,
     'start_point': d_range,
@@ -133,19 +152,20 @@ def find_icon_location(k, lushi, icon, kk=0.8699):
     if k in G_ICON_RANGE_CACHE:
         p1, p2 = (G_CACHE_MAP[k])(icon, G_ICON_RANGE_CACHE[k])
         lushi = lushi[p1[1]:p2[1], p1[0]:p2[0]]
-    elif k in G_ICON_RANGE_STATIC:
+    elif k in G_ICON_RANGE_STATIC and len(G_ICON_RANGE_STATIC[k]) == 2:
         p1, p2 = G_ICON_RANGE_STATIC[k]
         lushi = lushi[p1[1]:p2[1], p1[0]:p2[0]]
     elif k == 'battle_ready' and 'member_ready' in G_ICON_RANGE_CACHE:
         p1, p2 = (G_CACHE_MAP['member_ready'])(icon, G_ICON_RANGE_CACHE['member_ready'])
         lushi = lushi[p1[1]:p2[1], p1[0]:p2[0]]
     else:
-        print(_t('warn'), 'NO CACHE key: %s kk: %f' % (k, kk))
+        if k != 'team_list' and k != 'team_lock' and not k.startswith('1-') and not k.startswith('2-'):
+            print(_t('warn'), 'NO CACHE key: %s kk: %.3f' % (k, kk))
 
     result = cv2.matchTemplate(lushi, icon, cv2.TM_CCOEFF_NORMED)
     (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(result)
-    if k == 'b-try' or k == 'not_ready_dots' or k == 'skill_select':
-        kk = 0.68
+    if k == 'b-try' or k == 'b-fh' or k == 'not_ready_dots' or k == 'skill_select':
+        kk = 0.60
         
     if k.startswith('final_reward'):
         kk = 0.55
@@ -157,7 +177,7 @@ def find_icon_location(k, lushi, icon, kk=0.8699):
             tmp = (G_CACHE_MAP[k])(icon, G_ICON_RANGE_CACHE[k])[0]
         elif k == 'battle_ready' and 'member_ready' in G_ICON_RANGE_CACHE:
             tmp = (G_CACHE_MAP['member_ready'])(icon, G_ICON_RANGE_CACHE['member_ready'])[0]
-        elif k in G_ICON_RANGE_STATIC:
+        elif k in G_ICON_RANGE_STATIC and len(G_ICON_RANGE_STATIC[k]) == 2:
             tmp = G_ICON_RANGE_STATIC[k][0]
         
         startX, startY = tmp[0] + maxLoc[0], tmp[1] + maxLoc[1]
@@ -166,11 +186,20 @@ def find_icon_location(k, lushi, icon, kk=0.8699):
         ret = (True, px, py, -maxVal if k in G_ICON_RANGE_CACHE or k in G_ICON_RANGE_STATIC else maxVal)
 
         if k in G_CACHE_MAP:
+            if k not in G_ICON_RANGE_CACHE and maxVal > 0.85:
+                p1, p2 = (G_CACHE_MAP[k])(icon, (px, py))
+                pps = '## [(%d, %d), (%d, %d)]' % (p1[0], p1[1], p2[0], p2[1])
+                print(_t('data'), 'set g_icon_range_cache key: %s => (%d, %d) kk: %.3f, val: %.3f %s' % (k, px, py, kk, maxVal, pps))
+
             G_ICON_RANGE_CACHE[k] = (px, py)
+            if k in G_ICON_RANGE_STATIC and len(G_ICON_RANGE_STATIC[k]) == 2:
+                del G_ICON_RANGE_STATIC[k]
 
         # print(_t(), 'CACHE:', G_ICON_RANGE_CACHE)
         return ret
     else:
+        if maxVal > 0.55 and (k == 'b-try' or k == 'b-fh'):
+            print(_t('warn'), 'not natch key: %s, kk: %.3f, val: %.3f' % (k, kk, maxVal))
         return False, None, None, maxVal
 
 def http_get(url):
@@ -360,16 +389,24 @@ class Agent:
             self.run_pve_break(no or '2-6', for_jy=False)
             # self.run_pve_full(no or '1-1', reward_count=3, max_member_ready=99, max_buf_ready=99, ext_reward=True)
 
-    def run_test(self):
+    def run_test(self, no='1-1', nn=50):
         global rect
 
-        delay = 2.5
+        print(_t(), 'run_test nn:', nn)
+
+        self.acc, self.state, self.no, self.reward_count = 0, 'init', '1-1', 3
+        delay, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, is_first = 2.5, 0, 0, 0, True
+
+        self._check_image('run_test_init')
+        
         while True:
             time.sleep((np.random.rand() + delay) if delay > 0 else 0.3)
-
-            states, rect = self.check_state()
+            states, rect = self.check_state(ext_buf = True, ext_reward = True)
             print(_t(), self.state + ':', states, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, delay)
-
+            nn -= 1
+            if nn <= 0:
+                break
+            
     def run_pve_full(self, no='2-6', reward_count=3, max_member_ready=2, max_buf_ready=3, ext_reward=False):
         global rect
 
@@ -390,6 +427,12 @@ class Agent:
             self.empty_acc = (self.empty_acc + 1) if not states or 'cfm_done' in states else 0                
             delay = delay if delay < 3 else 3
             print(_t(), self.state + ':', states, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, round(delay, 2))
+
+
+            if 'start_point' in states and len(states)==1 and states['start_point'][1] < 0.911:
+                time.sleep(2.1)
+                continue
+
 
             if self.empty_acc >= 15:
                 self.empty_acc = 0
@@ -593,7 +636,9 @@ class Agent:
                 self.buf_ready_acc = 0
                 self.shutdown_acc = 0
                 
-                time.sleep(0.3)
+                time.sleep(1.3)
+                x_click(self.cfm_done_loc)
+                time.sleep(0.9)
                 x_click(self.cfm_done_loc)
 
                 time.sleep(3.3)
@@ -633,6 +678,10 @@ class Agent:
             self.empty_acc = (self.empty_acc + 1) if not states or 'cfm_done' in states else 0
             delay = delay if delay < 3 else 3
             print(_t(), self.state + ':', states, self.empty_acc, round(delay, 2))
+
+            if 'start_point' in states and len(states)==1 and states['start_point'][1] < 0.911:
+                time.sleep(2.1)
+                continue
 
             if self.empty_acc >= 15:
                 self.empty_acc = 0
@@ -722,6 +771,7 @@ class Agent:
                 self.do_skill_select()
                 time.sleep(0.2)
                 x_click(self.start_battle_loc)
+                delay = -0.9
                 continue
 
             x_moveTo(self.start_game_relative_loc)
@@ -841,12 +891,12 @@ class Logger(object):
         self.log.close()
         self.log = None
 
-def main():
+def main(cfg='config.txt', as_test=0):
     tip = "请启动炉石，将炉石调至窗口模式，分辨率设为1600x900，画质设为高 参考 config.txt 修改配置文件"
     if not pyautogui.confirm(text=tip):
         return
 
-    with open('config.txt', 'r', encoding='utf-8') as f:
+    with open(cfg, 'r', encoding='utf-8') as f:
         lines = f.readlines()
 
     assert len(lines) >= 7, 'must has 7 lines: team_id, heros_id, skills_id, targets_id, while_delay, delay, hh_delay'
@@ -869,13 +919,13 @@ def main():
     pyautogui.PAUSE = delay
     agent = Agent(team_id=team_id, heros_id=heros_id, skills_id=skills_id, targets_id=targets_id, hero_cnt=hero_cnt,
               while_delay=while_delay, hh_delay=hh_delay)
-              
+
     try:
-        lf = os.path.join(os.getcwd(), 'logs', '[%d] %s.log' % (os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False)))
+        lf = os.path.join(os.getcwd(), 'logs', '%s[%d] %s.log' % ('test ' if as_test else '', os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False)))
         sys.stdout = Logger(lf)
 
         print(_t(), 'heros_id:', heros_id, 'skills_id:', skills_id, 'no:', _no)
-        agent.run(_no)
+        agent.run(_no) if not as_test else agent.run_test(_no)
     finally:
         sys.stdout.reset()
 
