@@ -107,8 +107,8 @@ G_ICON_RANGE_STATIC = {
     'f-fh': [(1156, 485), (1390, 549)]
 }
 
-for t in ['b-fh', 'b-zs', 'b-fs', 'b-ck', 'b-try']:
-    G_ICON_RANGE_STATIC[t] = [(300, 380), (980, 550)]
+for t in ['b-fh', 'b-fh2', 'b-zs', 'b-fs', 'b-ck', 'b-try']:
+    G_ICON_RANGE_STATIC[t] = [(300, 370), (1000, 560)]
 
 def d_range(icon, pos, mw=10, mh=5):
     w = icon.shape[1] // 2
@@ -146,7 +146,7 @@ G_CACHE_MAP = {
     'final_reward': d_range,
 }
 
-def find_icon_location(k, lushi, icon, kk=0.8699):
+def find_icon_location(k, lushi, icon, kk):
     global G_ICON_RANGE_CACHE
 
     if k in G_ICON_RANGE_CACHE:
@@ -164,11 +164,14 @@ def find_icon_location(k, lushi, icon, kk=0.8699):
 
     result = cv2.matchTemplate(lushi, icon, cv2.TM_CCOEFF_NORMED)
     (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(result)
-    if k == 'b-try' or k == 'b-fh' or k == 'not_ready_dots' or k == 'skill_select':
-        kk = 0.60
+    if k == 'b-try' or k == 'b-fh' or k == 'b-fh2':
+        kk = 0.575 if kk > 0.575 else kk
+        
+    if k == 'not_ready_dots' or k == 'skill_select':
+        kk = 0.621 if kk > 0.621 else kk
         
     if k.startswith('final_reward'):
-        kk = 0.55
+        kk = 0.551 if kk > 0.551 else kk
         
     if maxVal > kk:
         maxVal = round(maxVal, 3)
@@ -407,7 +410,7 @@ class Agent:
             if nn <= 0:
                 break
             
-    def run_pve_full(self, no='2-6', reward_count=3, max_member_ready=2, max_buf_ready=3, ext_reward=False):
+    def run_pve_full(self, no='2-6', reward_count=5, max_member_ready=2, max_buf_ready=3, ext_reward=False):
         global rect
 
         print(_t(), 'run_pve_full no:', no)
@@ -426,7 +429,7 @@ class Agent:
             delay = (delay + 0.1) if not states else delay
             self.empty_acc = (self.empty_acc + 1) if not states or 'cfm_done' in states else 0                
             delay = delay if delay < 3 else 3
-            print(_t(), self.state + ':', states, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, round(delay, 2))
+            print(_t(), self.acc, self.state + ':', states, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, round(delay, 2))
 
 
             if 'start_point' in states and len(states)==1 and states['start_point'][1] < 0.911:
@@ -463,7 +466,7 @@ class Agent:
             if is_empty and 'start_point' not in states:
                 self.state = 'map'
                 map_not_ready = True
-                for b_icon in ['b-fs', 'b-sp', 'b-zs', 'b-ck', 'b-fh', 'b-try']:
+                for b_icon in ['b-fs', 'b-sp', 'b-zs', 'b-ck', 'b-fh', 'b-fh2', 'b-try']:
                     if b_icon in states:
                         if b_icon == 'b-try':
                             if self.member_ready_acc >= max_member_ready:
@@ -493,7 +496,17 @@ class Agent:
 
                 time.sleep(1.6)
                 new_states, rect = self.check_state(ext_buf=True, ext_reward=ext_reward)
-                print(_t(), self.state + '_:', new_states, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, round(delay, 2))
+                print(_t(), self.acc, self.state + '_:', new_states, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, round(delay, 2))
+
+                if len(new_states) == 1 and 'map_not_ready' in new_states and len(states) == 1 and 'map_not_ready' in states:
+                    time.sleep(0.8)
+                    s_rect, s_image, s_image_ = find_lushi_window(self.acc)
+                    for s_k in ['b-fh', 'b-try', 'b-fh2']:
+                        s_success, s_click_loc, s_conf = self.find_icon(s_k, self.icons[s_k], s_rect, s_image)
+                        if s_success:
+                            new_states[s_k] = (s_click_loc, s_conf)
+                            print(_t('hfix'), self.acc, s_k + ':', new_states, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, round(delay, 2))
+                            
 
                 if 'start_game' in new_states and 'map_not_ready' not in new_states and self.member_ready_acc < max_member_ready:
                     x_moveTo(self.start_game_relative_loc)
@@ -513,7 +526,7 @@ class Agent:
                     # self.give_up()
                     continue
                     
-                for b_icon in ['b-sp', 'b-fs', 'b-zs', 'b-ck', 'b-fh', 'b-try']:
+                for b_icon in ['b-sp', 'b-fs', 'b-zs', 'b-ck', 'b-fh', 'b-fh2', 'b-try']:
                     if b_icon in new_states:
                         if b_icon == 'b-try':
                             if self.member_ready_acc >= max_member_ready:
@@ -677,7 +690,7 @@ class Agent:
             delay = (delay + 0.1) if not states else delay
             self.empty_acc = (self.empty_acc + 1) if not states or 'cfm_done' in states else 0
             delay = delay if delay < 3 else 3
-            print(_t(), self.state + ':', states, self.empty_acc, round(delay, 2))
+            print(_t(), self.acc, self.state + ':', states, self.empty_acc, round(delay, 2))
 
             if 'start_point' in states and len(states)==1 and states['start_point'][1] < 0.911:
                 time.sleep(2.1)
@@ -706,7 +719,7 @@ class Agent:
 
                 time.sleep(1.5)
                 new_states, rect = self.check_state()
-                print(_t(), self.state + '_:', states, self.empty_acc, round(delay, 2))
+                print(_t(), self.acc, self.state + '_:', states, self.empty_acc, round(delay, 2))
 
                 x_moveTo(self.start_game_relative_loc)
                 r_click()
@@ -811,15 +824,15 @@ class Agent:
 
         ext_keys = []
         if self.no == '1-1':
-            ext_keys = (ext_keys + ['b-fh', 'b-try', 'f-fh']) if ext_buf else ext_keys
+            ext_keys = (ext_keys + ['b-fh', 'b-fh2', 'b-try', 'f-fh']) if ext_buf else ext_keys
         else:
-            ext_keys = (ext_keys + ['b-fh', 'b-zs', 'b-fs', 'b-ck', 'b-try', 'f-fh', 'f-buf']) if ext_buf else ext_keys
+            ext_keys = (ext_keys + ['b-fh', 'b-fh2', 'b-zs', 'b-fs', 'b-ck', 'b-try', 'f-fh', 'f-buf']) if ext_buf else ext_keys
             
         ext_keys = (['b-sp', ] + ext_keys + ['stranger', 'blue_portal', 'destroy', 'boom']) if ext_sp else ext_keys
         
         try_keys = (try_keys + ['final_reward', 'final_reward2', 'cfm_done', 'cfm_reward']) if ext_reward else try_keys
         base_keys = ['start_game', 'map_not_ready', 'start_point', 'map_btn']
-        base_keys = (base_keys + ['team_lock', 'team_list']) if acc < 20 else base_keys
+        base_keys = (base_keys + ['team_lock', 'team_list']) if acc < 60 else base_keys
 
         skips = ['treasure_replace', 'map_btn'] if as_fast else []
         need_keys = try_keys + base_keys + ext_keys
@@ -834,7 +847,7 @@ class Agent:
         if image is None:
             return {}, rect
 
-        first_check, second_check = self._build_check_keys(self.acc, ext_buf, ext_sp, ext_reward) if self.acc % 100 == 1 or self.acc < 30 else \
+        first_check, second_check = self._build_check_keys(self.acc, ext_buf, ext_sp, ext_reward) if self.acc % 100 == 1 or self.acc < 60 else \
                                         (self.first_check, self.second_check)
         if not first_check and not second_check:
             first_check, second_check = self._build_check_keys(self.acc, ext_buf, ext_sp, ext_reward)
@@ -863,8 +876,8 @@ class Agent:
 
         return output_list, rect
 
-    def find_icon(self, k, icon, rect, image):
-        success, X, Y, conf = find_icon_location(k, image, icon)
+    def find_icon(self, k, icon, rect, image, kk=0.8699):
+        success, X, Y, conf = find_icon_location(k, image, icon, kk)
         if success:
             click_loc = (X + rect[0], Y + rect[1])
         else:
