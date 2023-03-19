@@ -45,20 +45,20 @@ def _tt(fmt='%Y-%m-%d %H:%M:%S.%f', fix=True, now=None):
 
     return ret
     
-def find_lushi_window(acc):
+def find_lushi_window(acc, flush=False):
     global G_HWND, G_RECT
 
-    hwnd = G_HWND if G_HWND else findTopWindow("炉石传说")
+    hwnd = G_HWND if G_HWND and not flush else findTopWindow("炉石传说")
     G_HWND = hwnd
 
-    if acc % 100 == 13 or not hwnd:
+    if acc % 50 == 13 or not hwnd or flush:
         hwnd = findTopWindow("炉石传说")
         G_HWND = hwnd if hwnd else None
 
     if not G_HWND:
         return G_RECT, None, None
 
-    t_rect = G_RECT if G_RECT else win32gui.GetWindowPlacement(hwnd)[-1]
+    t_rect = G_RECT if G_RECT and not flush else win32gui.GetWindowPlacement(hwnd)[-1]
     G_RECT = t_rect
 
     _image = ImageGrab.grab(t_rect)
@@ -107,8 +107,8 @@ G_ICON_RANGE_STATIC = {
     'f-fh': [(1156, 485), (1390, 549)]
 }
 
-for t in ['b-fh', 'b-fh2', 'b-zs', 'b-fs', 'b-ck', 'b-try']:
-    G_ICON_RANGE_STATIC[t] = [(300, 370), (1000, 560)]
+for t in ['b-fh', 'b-zs', 'b-fs', 'b-ck', 'b-try']:
+    G_ICON_RANGE_STATIC[t] = [(300, 350), (1000, 580)]
 
 def d_range(icon, pos, mw=10, mh=5):
     w = icon.shape[1] // 2
@@ -164,14 +164,17 @@ def find_icon_location(k, lushi, icon, kk):
 
     result = cv2.matchTemplate(lushi, icon, cv2.TM_CCOEFF_NORMED)
     (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(result)
-    if k == 'b-try' or k == 'b-fh' or k == 'b-fh2':
-        kk = 0.575 if kk > 0.575 else kk
+    if k == 'b-try' or k == 'b-fh':
+        kk = 0.625 if kk > 0.625 else kk
         
     if k == 'not_ready_dots' or k == 'skill_select':
-        kk = 0.621 if kk > 0.621 else kk
+        kk = 0.625 if kk > 0.625 else kk
         
     if k.startswith('final_reward'):
-        kk = 0.551 if kk > 0.551 else kk
+        kk = 0.525 if kk > 0.525 else kk
+
+    if k == 'battle_ready':
+        kk = 0.929 if kk < 0.929 else kk
         
     if maxVal > kk:
         maxVal = round(maxVal, 3)
@@ -201,8 +204,8 @@ def find_icon_location(k, lushi, icon, kk):
         # print(_t(), 'CACHE:', G_ICON_RANGE_CACHE)
         return ret
     else:
-        if maxVal > 0.55 and (k == 'b-try' or k == 'b-fh'):
-            print(_t('warn'), 'not natch key: %s, kk: %.3f, val: %.3f' % (k, kk, maxVal))
+        if maxVal > 0.565 and (k == 'b-try' or k == 'b-fh'):
+            print(_t('data'), 'not natch key: %s, kk: %.3f, val: %.3f' % (k, kk, maxVal))
         return False, None, None, maxVal
 
 def http_get(url):
@@ -364,7 +367,9 @@ class Agent:
                 x_click(self.enemy_mid_location)
                 time.sleep(0.1)
 
-            time.sleep(0.6) if idx == 2 else None
+            time.sleep(0.4) if idx == 2 else None
+            time.sleep(0.2)
+            x_moveTo(self.start_game_relative_loc)
             if self.hero_cnt == 2 and idx == 1:
                 break
 
@@ -431,7 +436,6 @@ class Agent:
             delay = delay if delay < 3 else 3
             print(_t(), self.acc, self.state + ':', states, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, round(delay, 2))
 
-
             if 'start_point' in states and len(states)==1 and states['start_point'][1] < 0.911:
                 time.sleep(2.1)
                 continue
@@ -444,6 +448,7 @@ class Agent:
                 self.shutdown_acc += 1
                 self._check_image('empty-%d' % (self.shutdown_acc, ))
                 if self.shutdown_acc >= 2:
+                    s_rect, s_image, s_image_ = find_lushi_window(self.acc, flush=True)
                     x_click(self.enemy_mid_location)
                     time.sleep(0.8)
                     x_click(self.member_ready_loc)
@@ -466,7 +471,7 @@ class Agent:
             if is_empty and 'start_point' not in states:
                 self.state = 'map'
                 map_not_ready = True
-                for b_icon in ['b-fs', 'b-sp', 'b-zs', 'b-ck', 'b-fh', 'b-fh2', 'b-try']:
+                for b_icon in ['b-fs', 'b-sp', 'b-zs', 'b-ck', 'b-fh', 'b-try']:
                     if b_icon in states:
                         if b_icon == 'b-try':
                             if self.member_ready_acc >= max_member_ready:
@@ -489,9 +494,10 @@ class Agent:
                             # self.give_up()
                             
                         map_not_ready = False
+                        self.shutdown_acc = 0
                         break
 
-            if map_not_ready:
+            if map_not_ready or self.empty_acc >= 8:
                 has_break = True
 
                 time.sleep(1.6)
@@ -501,7 +507,7 @@ class Agent:
                 if len(new_states) == 1 and 'map_not_ready' in new_states and len(states) == 1 and 'map_not_ready' in states:
                     time.sleep(0.8)
                     s_rect, s_image, s_image_ = find_lushi_window(self.acc)
-                    for s_k in ['b-fh', 'b-try', 'b-fh2']:
+                    for s_k in ['b-fh', 'b-try']:
                         s_success, s_click_loc, s_conf = self.find_icon(s_k, self.icons[s_k], s_rect, s_image)
                         if s_success:
                             new_states[s_k] = (s_click_loc, s_conf)
@@ -526,7 +532,7 @@ class Agent:
                     # self.give_up()
                     continue
                     
-                for b_icon in ['b-sp', 'b-fs', 'b-zs', 'b-ck', 'b-fh', 'b-fh2', 'b-try']:
+                for b_icon in ['b-sp', 'b-fs', 'b-zs', 'b-ck', 'b-fh', 'b-try']:
                     if b_icon in new_states:
                         if b_icon == 'b-try':
                             if self.member_ready_acc >= max_member_ready:
@@ -549,6 +555,7 @@ class Agent:
                             # self.give_up()
 
                         has_break = False
+                        self.shutdown_acc = 0
                         break
 
 
@@ -565,7 +572,10 @@ class Agent:
                         time.sleep(0.9)
                         # self.give_up()
                     continue
-
+                else:
+                    x_moveTo(self.start_game_relative_loc)
+                    r_click()
+                    
             if self.no in states:
                 self.state = 'map'
                 self.member_ready_acc = 0
@@ -592,6 +602,7 @@ class Agent:
                 self.state = 'map'
                 self.member_ready_acc = 0
                 self.buf_ready_acc = 0
+                self.shutdown_acc = 0
                 
                 x_click(self.team_loc)
                 if 'team_lock' in states:
@@ -606,6 +617,7 @@ class Agent:
                 self.do_use_hero()
                 r_click(states['member_ready'][0])
                 self.member_ready_acc += 1
+                self.shutdown_acc = 0
                 delay = -0.5
                 continue
 
@@ -613,12 +625,14 @@ class Agent:
                 self.state = 'battle'
                 r_click(states['battle_ready'][0])
                 self._battle_ready = states['battle_ready'][0]
+                self.shutdown_acc = 0
                 continue
 
             if 'treasure_list' in states or 'treasure_replace' in states:
                 self.state = 'map'
                 self.do_treasure_list()
-
+                self.shutdown_acc = 0
+                
                 if self.member_ready_acc >= max_member_ready + 1 or self.buf_ready_acc >= max_buf_ready:
                     time.sleep(0.9)
                     # self.give_up()
@@ -632,6 +646,7 @@ class Agent:
                 self.do_skill_select()
                 time.sleep(0.1)
                 x_click(self.start_battle_loc)
+                self.shutdown_acc = 0
                 continue
 
             if 'final_reward' in states or 'final_reward2' in states:
@@ -654,7 +669,7 @@ class Agent:
                 time.sleep(0.9)
                 x_click(self.cfm_done_loc)
 
-                time.sleep(3.3)
+                time.sleep(2.3)
                 [x_click(self.start_game_relative_loc) for _ in range(5)]
                 
                 continue
@@ -802,13 +817,13 @@ class Agent:
             self.do_shutdown()
             raise
 
-    def _check_image(self, tag='', pp='tmp'):
+    def _check_image(self, tag='', pp='tmp', level='warn'):
         rect, image, _image = find_lushi_window(self.acc)
         if image is None:
             return
 
         fname = os.path.join(os.getcwd(), pp, '[%d] %s [%s].png' % (os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False), tag or 'unknown'))
-        print(_t(), 'acc:', self.acc, ', fname:', fname)
+        print(_t(level), 'acc:', self.acc, ', fname:', fname)
         _image.save(fname)
 
     def _build_check_keys(self, acc, ext_buf=False, ext_sp=None, ext_reward=None, as_fast=True):
@@ -824,9 +839,9 @@ class Agent:
 
         ext_keys = []
         if self.no == '1-1':
-            ext_keys = (ext_keys + ['b-fh', 'b-fh2', 'b-try', 'f-fh']) if ext_buf else ext_keys
+            ext_keys = (ext_keys + ['b-fh', 'b-try', 'f-fh']) if ext_buf else ext_keys
         else:
-            ext_keys = (ext_keys + ['b-fh', 'b-fh2', 'b-zs', 'b-fs', 'b-ck', 'b-try', 'f-fh', 'f-buf']) if ext_buf else ext_keys
+            ext_keys = (ext_keys + ['b-fh', 'b-zs', 'b-fs', 'b-ck', 'b-try', 'f-fh', 'f-buf']) if ext_buf else ext_keys
             
         ext_keys = (['b-sp', ] + ext_keys + ['stranger', 'blue_portal', 'destroy', 'boom']) if ext_sp else ext_keys
         
