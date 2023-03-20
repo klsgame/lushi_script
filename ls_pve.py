@@ -51,7 +51,7 @@ def find_lushi_window(acc, flush=False):
     hwnd = G_HWND if G_HWND and not flush else findTopWindow("炉石传说")
     G_HWND = hwnd
 
-    if acc % 50 == 13 or not hwnd or flush:
+    if acc % 100 == 13 or not hwnd or flush:
         hwnd = findTopWindow("炉石传说")
         G_HWND = hwnd if hwnd else None
 
@@ -165,7 +165,7 @@ def find_icon_location(k, lushi, icon, kk):
     result = cv2.matchTemplate(lushi, icon, cv2.TM_CCOEFF_NORMED)
     (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(result)
     if k == 'b-try' or k == 'b-fh':
-        kk = 0.625 if kk > 0.625 else kk
+        kk = 0.565 if kk > 0.565 else kk
         
     if k == 'not_ready_dots' or k == 'skill_select':
         kk = 0.625 if kk > 0.625 else kk
@@ -439,9 +439,12 @@ class Agent:
             if 'start_point' in states and len(states)==1 and states['start_point'][1] < 0.911:
                 time.sleep(2.1)
                 continue
-
+                
+            if self.empty_acc >= 9:
+                self.state = 'map'
 
             if self.empty_acc >= 15:
+                self.state = 'map'
                 self.empty_acc = 0
                 # self.give_up()
                 set_top_window()
@@ -497,7 +500,7 @@ class Agent:
                         self.shutdown_acc = 0
                         break
 
-            if map_not_ready or self.empty_acc >= 8:
+            if map_not_ready:
                 has_break = True
 
                 time.sleep(1.6)
@@ -669,7 +672,7 @@ class Agent:
                 time.sleep(0.9)
                 x_click(self.cfm_done_loc)
 
-                time.sleep(2.3)
+                time.sleep(1.3)
                 [x_click(self.start_game_relative_loc) for _ in range(5)]
                 
                 continue
@@ -862,12 +865,8 @@ class Agent:
         if image is None:
             return {}, rect
 
-        first_check, second_check = self._build_check_keys(self.acc, ext_buf, ext_sp, ext_reward) if self.acc % 100 == 1 or self.acc < 60 else \
-                                        (self.first_check, self.second_check)
-        if not first_check and not second_check:
-            first_check, second_check = self._build_check_keys(self.acc, ext_buf, ext_sp, ext_reward)
-        self.first_check, self.second_check = first_check, second_check
-        
+        first_check, second_check = self._build_check_keys(self.acc, ext_buf, ext_sp, ext_reward)
+
         output_list = {}
         for k, v in first_check:
             success, click_loc, conf = self.find_icon(k, v, rect, image)
