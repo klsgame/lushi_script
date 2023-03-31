@@ -451,13 +451,12 @@ class Agent:
                 self.shutdown_acc += 1
                 self._check_image('empty-%d' % (self.shutdown_acc, ))
                 if self.shutdown_acc >= 2:
-                    s_rect, s_image, s_image_ = find_lushi_window(self.acc, flush=True)
                     x_click(self.enemy_mid_location)
                     time.sleep(0.8)
                     x_click(self.member_ready_loc)
                 if self.shutdown_acc >= 5:
-                    self._check_image('shutdown')
                     self.do_shutdown()
+                    self._check_image('shutdown')
                     break
                 continue
 
@@ -509,9 +508,8 @@ class Agent:
 
                 if len(new_states) == 1 and 'map_not_ready' in new_states and len(states) == 1 and 'map_not_ready' in states:
                     time.sleep(0.8)
-                    s_rect, s_image, s_image_ = find_lushi_window(self.acc)
                     for s_k in ['b-fh', 'b-try']:
-                        s_success, s_click_loc, s_conf = self.find_icon(s_k, self.icons[s_k], s_rect, s_image)
+                        s_success, s_click_loc, s_conf = self.check_icon(s_k)
                         if s_success:
                             new_states[s_k] = (s_click_loc, s_conf)
                             print(_t('hfix'), self.acc, s_k + ':', new_states, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, round(delay, 2))
@@ -725,8 +723,8 @@ class Agent:
                     time.sleep(0.8)
                     x_click(self.member_ready_loc)
                 if self.shutdown_acc >= 5:
-                    self._check_image('shutdown')
                     self.do_shutdown()
+                    self._check_image('shutdown')
                     break
                 continue
 
@@ -816,9 +814,20 @@ class Agent:
         except KeyboardInterrupt:
             raise
         except Exception as ex:
-            print(_t(), 'check_state acc: %d, err: %r' % (self.acc, ex))
+            print(_t('error'), 'check_state acc: %d, err: %r' % (self.acc, ex))
             self.do_shutdown()
+            self._check_image('shutdown')
             raise
+
+    def check_icon(self, s_k, kk=0.8699):
+        try:
+            s_rect, s_image, _ = find_lushi_window(self.acc)
+            return self.find_icon(s_k, self.icons[s_k], s_rect, s_image, kk)
+        except KeyboardInterrupt:
+            raise
+        except Exception as ex:
+            print(_t('error'), 'check_icon s_k: %s, acc: %d, err: %r' % (s_k, self.acc, ex))
+            return False, None, None
 
     def _check_image(self, tag='', pp='tmp', level='warn'):
         rect, image, _image = find_lushi_window(self.acc)
@@ -850,7 +859,7 @@ class Agent:
         
         try_keys = (try_keys + ['final_reward', 'final_reward2', 'cfm_done', 'cfm_reward']) if ext_reward else try_keys
         base_keys = ['start_game', 'map_not_ready', 'start_point', 'map_btn']
-        base_keys = (base_keys + ['team_lock', 'team_list']) if acc < 60 else base_keys
+        base_keys = (base_keys + ['team_lock', 'team_list']) if acc < 90 else base_keys
 
         skips = ['treasure_replace', 'map_btn'] if as_fast else []
         need_keys = try_keys + base_keys + ext_keys
