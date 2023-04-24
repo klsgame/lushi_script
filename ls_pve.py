@@ -359,7 +359,6 @@ class Agent:
         for idx, skill_id, target_id in zip([0, 1, 2], self.skills_id, self.targets_id):
             time.sleep(0.2)
             
-            time.sleep(0.3) if idx == 2 else None
             x_click(self.skill_relative_locs[skill_id])
             
             if target_id != -1:
@@ -367,11 +366,13 @@ class Agent:
                 x_click(self.enemy_mid_location)
                 time.sleep(0.1)
 
-            time.sleep(0.4) if idx == 2 else None
             time.sleep(0.2)
-            x_moveTo(self.start_game_relative_loc)
-            if self.hero_cnt == 2 and idx == 1:
+            if (self.hero_cnt == 2 and idx == 1) or (self.hero_cnt == 3 and idx == 2):
+                x_moveTo(self.start_game_relative_loc)
+                time.sleep(0.2)
                 break
+
+            x_moveTo(self.start_game_relative_loc)
 
     def do_select_stranger(self):
         visitor_id = np.random.randint(0, 3)
@@ -929,7 +930,7 @@ class Logger(object):
 
 def main(cfg='config.txt', as_test=0):
     tip = "请启动炉石，将炉石调至窗口模式，分辨率设为1600x900，画质设为高 参考 config.txt 修改配置文件"
-    if not pyautogui.confirm(text=tip):
+    if pyautogui.confirm(text=tip) == "取消":
         return
 
     with open(cfg, 'r', encoding='utf-8') as f:
