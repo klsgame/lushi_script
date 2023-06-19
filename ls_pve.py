@@ -174,7 +174,7 @@ def find_icon_location(k, lushi, icon, kk):
         kk = 0.525 if kk > 0.525 else kk
 
     if k == 'battle_ready':
-        kk = 0.929 if kk < 0.929 else kk
+        kk = 0.909 if kk > 0.909 else kk
         
     if maxVal > kk:
         maxVal = round(maxVal, 3)
@@ -204,7 +204,7 @@ def find_icon_location(k, lushi, icon, kk):
         # print(_t(), 'CACHE:', G_ICON_RANGE_CACHE)
         return ret
     else:
-        if maxVal > 0.565 and (k == 'b-try' or k == 'b-fh'):
+        if maxVal > 0.565 and (k == 'b-try' or k == 'b-fh' or k == 'battle_ready'):
             print(_t('data'), 'not natch key: %s, kk: %.3f, val: %.3f' % (k, kk, maxVal))
         return False, None, None, maxVal
 
@@ -433,7 +433,8 @@ class Agent:
             states, rect = self.check_state(ext_buf = self.state != 'battle', ext_reward = ext_reward)
 
             delay = (delay + 0.1) if not states else delay
-            self.empty_acc = (self.empty_acc + 1) if not states or 'cfm_done' in states else 0                
+            only_b_try = len(states) == 2 and 'b-try' in states
+            self.empty_acc = (self.empty_acc + 1) if not states or only_b_try or 'cfm_done' in states else 0
             delay = delay if delay < 3 else 3
             print(_t(), self.acc, self.state + ':', states, self.empty_acc, self.member_ready_acc, self.buf_ready_acc, round(delay, 2))
 
@@ -705,7 +706,8 @@ class Agent:
             states, rect = self.check_state()
 
             delay = (delay + 0.1) if not states else delay
-            self.empty_acc = (self.empty_acc + 1) if not states or 'cfm_done' in states else 0
+            only_b_try = len(states) == 2 and 'b-try' in states
+            self.empty_acc = (self.empty_acc + 1) if not states or only_b_try or 'cfm_done' in states else 0
             delay = delay if delay < 3 else 3
             print(_t(), self.acc, self.state + ':', states, self.empty_acc, round(delay, 2))
 
@@ -930,7 +932,7 @@ class Logger(object):
 
 def main(cfg='config.txt', as_test=0):
     tip = "请启动炉石，将炉石调至窗口模式，分辨率设为1600x900，画质设为高 参考 config.txt 修改配置文件"
-    if pyautogui.confirm(text=tip) == "取消":
+    if not pyautogui.confirm(text=tip) == "OK":
         return
 
     with open(cfg, 'r', encoding='utf-8') as f:
