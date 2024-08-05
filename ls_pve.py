@@ -930,8 +930,8 @@ class Logger(object):
         self.log.close()
         self.log = None
 
-def main(cfg='config.txt', as_test=0):
-    tip = "请启动炉石，将炉石调至窗口模式，分辨率设为1600x900，画质设为高 参考 config.txt 修改配置文件"
+def main(cfg='ls_pve.txt', as_test=0):
+    tip = "请启动炉石，将炉石调至窗口模式，分辨率设为1600x900，画质设为高 参考 ls_pve.txt 修改配置文件"
     if not pyautogui.confirm(text=tip) == "OK":
         return
 
@@ -960,7 +960,7 @@ def main(cfg='config.txt', as_test=0):
               while_delay=while_delay, hh_delay=hh_delay)
 
     try:
-        lf = os.path.join(os.getcwd(), 'logs', '%s[%d] %s.log' % ('test ' if as_test else '', os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False)))
+        lf = os.path.join(os.getcwd(), 'logs', 'ls_pve%s[%d] %s.log' % ('_test ' if as_test else '', os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False)))
         sys.stdout = Logger(lf)
 
         print(_t(), 'heros_id:', heros_id, 'skills_id:', skills_id, 'no:', _no)
