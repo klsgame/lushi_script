@@ -7,6 +7,8 @@ import sys
 import time
 from urllib import request
 
+import winsound
+
 import pyautogui
 import win32gui
 
@@ -95,17 +97,43 @@ x_click = lambda pos=None, y=None, **kwgs: pyautogui.click(rect[0] + _tp(pos, y)
                                                            rect[1] + _tp(pos, y)[1], **kwgs)
 
 
+def _next_pos(mid, nn, wn, hn):
+    pos = [mid[0], mid[1]]
+    op, k = 0, 1
+    while nn > 0:
+        j = k
+        while nn > 0 and j > 0:
+            on = op % 4
+            if on == 0:
+                pos[0] += wn
+            elif on == 1:
+                pos[1] += hn
+            elif on == 2:
+                pos[0] -= wn
+            elif on == 3:
+                pos[1] -= hn
+            j -= 1
+            nn -= 1
+        op += 1
+        k = (k + 1) if op % 2 == 0 else k
+
+    return pos[0], pos[1]
+
+
 class Agent:
 
-    def __init__(self, while_delay, hh_delay):
+    def __init__(self, while_delay, hh_delay, mpos, key1='1', key2='2',
+                 tmax=17.5):
         self.hh_delay, self.while_delay = hh_delay, while_delay
+        self.mpos = mpos
+        self.key1, self.key2 = key1, key2
+        self.tmax = tmax
 
         self.acc, self.state, self.no = 0, 'unknown', '0-0'
-
-        self.empty_acc = 0
         self.shutdown_acc = 0
-        self.height = 900
-        self.width = 1800
+
+        self.height = 1200
+        self.width = 1600
 
     def do_shutdown(self):
         print(_t(), 'acc:', self.acc, ', do_shutdown:', self.shutdown_acc)
@@ -121,7 +149,7 @@ class Agent:
         # '%Y-%m-%d_%H_%M_%S', False)) self._check_image()
         self.run_pve_full(no)
 
-    def run_test(self, no='1-1', nn=50):
+    def run_test(self, no='0-0', nn=50):
         global rect
 
         print(_t(), 'run_test nn:', nn)
@@ -129,6 +157,7 @@ class Agent:
         self.acc, self.state, self.no = 0, 'init', no
         delay, is_first = 2.5, True
 
+        set_top_window()
         self._check_image('run_test_init')
 
         while True:
@@ -136,12 +165,15 @@ class Agent:
 
             time.sleep((random.random() + delay) if delay > 0 else 0.3)
 
+            flags, hcursor, mpos = getCursorInfo()
+            rgb = getPixel(self.mpos[0], self.mpos[1])
+            print(_t(), 'no:', self.no, 'mpos:', mpos, 'rgb:', rgb, 'hcursor:', hcursor)
+
             nn -= 1
             if nn <= 0:
                 break
 
-    def do_find_float(self, _rect, h=0.20, w=0.25, hstep=5.0, wstep=7.0):
-        found, pos = False, (0, 0)
+    def do_find_float(self, _rect, t_start, cursor, h=0.32, w=0.30, hstep=3.5, wstep=5.5):
         t = _rect[1] + self.height * 0.5 * h
         d = _rect[1] + self.height * 0.5 - self.height * 0.5 * h
         l = _rect[0] + self.width * w
@@ -149,16 +181,31 @@ class Agent:
         mid = (int((l + r) / 2), int((t + d) / 2))
         ww, hh = mid[0] - l, mid[1] - t
 
-        pos, wn, hn = mid, int(ww/wstep), int(hh/hstep)
-        while abs(pos[0] - mid[0]) <= ww and abs(pos[1] - mid[1]) <= hh:
+        nn, pos, wn, hn = 0, mid, int(ww / wstep), int(hh / hstep)
+        while time.time() - t_start <= self.tmax and abs(pos[0] - mid[0]) <= ww and abs(pos[1] - mid[1]) <= hh:
             x_moveTo(pos)
-            time.sleep(0.1)
-            flags, hcursor, mx, my = getCursorInfo()
-            pyautogui.pixel()
-            pass
-        return found, pos
+            time.sleep(0.06)
+            _, hcursor, mpos = getCursorInfo()
+            # print(_t(), 'no:', self.no, 'mpos:', mpos, 'hcursor:', hcursor)
+            if hcursor != cursor:
+                return True, mpos
 
-    def run_pve_full(self, no='1-1'):
+            nn += 1
+            pos = _next_pos(mid, nn, wn, hn)
+            time.sleep(0.03)
+
+        return False, (0, 0)
+
+    def do_wait_bite(self, t_start):
+        while time.time() - t_start <= self.tmax:
+            time.sleep(0.1)
+            rgb = getPixel(self.mpos[0], self.mpos[1])
+            if rgb[0] < 100 or rgb[1] < 100 or rgb[2] < 100:
+                return True
+
+        return False
+
+    def run_pve_full(self, no='0-0'):
         global rect
 
         print(_t(), 'run_pve_full no:', no)
@@ -166,36 +213,57 @@ class Agent:
 
         self.acc, self.state, self.no = 0, 'init', no
         delay, is_first = 0.2, True
-        self.empty_acc = 0
         self.shutdown_acc = 0
 
+        set_top_window()
         self._check_image('pve_full_init')
 
+        t_bait = time.time()
         while True:
+            self.acc += 1
             rect = find_wow_window()
+            time.sleep((random.random() + delay) / 3.0 if delay > 0 else 0.3)
 
-            time.sleep((random.random() + delay) if delay > 0 else 0.3)
+            t_start = time.time()
+            if t_start - t_bait > 603:
+                self.state = 'bait'
+                t_bait = t_start
+                pyautogui.press(self.key2)
+                print(_t(), 'state:', self.state, 'acc:', self.acc)
+                time.sleep(2.3)
 
-            self.state = 'before'
+            x_moveTo(self.width / 2, self.height / 2 + 40)
+            _, cursor, _ = getCursorInfo()
+
+            self.state = 'ready'
+            pyautogui.press(self.key1)
             print(_t(), 'state:', self.state, 'acc:', self.acc)
-            pyautogui.press('1')
-            time.sleep(0.8)
+            time.sleep(0.1)
 
-            self.state = 'after'
-            found, pos = self.do_find_float(rect)
+            self.state = 'find'
+            found, pos = self.do_find_float(rect, t_start, cursor)
+            if found:
+                self.state = 'wait'
+                print(_t(), 'state:', self.state, 'pos:', pos, 'acc:', self.acc)
+                time.sleep(1.3)
+                found = self.do_wait_bite(t_start)
+                if found:
+                    time.sleep(0.1)
+                    pyautogui.click()
+                    self.shutdown_acc = 0
+                    time.sleep(0.3)
+
             if not found:
+                set_top_window()
+                self.state = 'error'
+                print(_t(), 'state:', self.state, 'acc:', self.acc, 'shutdown_acc:', self.shutdown_acc)
+
                 self.shutdown_acc += 1
-                self._check_image('empty-%d' % (self.shutdown_acc,))
+                # self._check_image('empty-%d' % (self.shutdown_acc,))
                 if self.shutdown_acc > 10:
                     self.do_shutdown()
                     self._check_image('shutdown')
                     break
-                continue
-
-            self.state = 'found'
-            print(_t(), 'state:', self.state, 'pos:', pos, 'acc:', self.acc)
-
-            time.sleep(self.while_delay)
 
     def _check_image(self, tag='', pp='tmp', level='warn'):
         fname = os.path.join(os.getcwd(), pp,
@@ -225,8 +293,8 @@ class Logger(object):
         self.log = None
 
 
-def main(cfg='w_pve.txt', as_test=1):
-    tip = "请启动wow，将wow调至窗口模式，分辨率设为1600x900，画质设为高 参考 w_pve.txt 修改配置文件"
+def main(cfg='w_pve.txt', as_test=0):
+    tip = "请启动wow，将wow调至窗口模式，分辨率设为1600x1200，画质设为高 参考 w_pve.txt 修改配置文件"
     if not pyautogui.confirm(text=tip) == "OK":
         return
 
@@ -243,18 +311,20 @@ def main(cfg='w_pve.txt', as_test=1):
 
     _no = (lines[line_num]).split('#')[0].strip() if len(lines) > line_num else '0-0'
 
-    pyautogui.PAUSE = delay
-    agent = Agent(while_delay=while_delay, hh_delay=hh_delay)
-
-    time.sleep(3)
-
-    
     try:
         lf = os.path.join(os.getcwd(), 'logs', 'w_pve%s[%d] %s.log' % (
             '_test ' if as_test else '', os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False)))
         sys.stdout = Logger(lf)
 
-        print(_t(), 'no:', _no)
+        time.sleep(3)
+        flags, hcursor, mpos = getCursorInfo()
+        rgb = getPixel(mpos[0], mpos[1])
+        winsound.Beep(600, 500)
+
+        pyautogui.PAUSE = delay
+        agent = Agent(while_delay=while_delay, hh_delay=hh_delay, mpos=mpos)
+
+        print(_t(), 'no:', _no, 'mpos:', mpos, 'rgb:', rgb, 'hcursor:', hcursor)
         agent.run(_no) if not as_test else agent.run_test(_no)
     finally:
         sys.stdout.reset()

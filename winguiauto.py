@@ -57,7 +57,7 @@ def getCursorInfo():
             mx, my = 0, 0
         else:
             raise
-    return flags, hcursor, mx, my
+    return flags, hcursor, (mx, my)
 
 
 def findTopWindow(wantedText=None, wantedClass=None, selectionFunction=None):
