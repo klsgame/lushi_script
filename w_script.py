@@ -122,12 +122,12 @@ def _next_pos(mid, nn, wn, hn):
 
 class Agent:
 
-    def __init__(self, while_delay, hh_delay, mpos, key1='1', key2='2',
-                 tmax=17.5):
-        self.hh_delay, self.while_delay = hh_delay, while_delay
+    def __init__(self, mpos, first_bait=300, key_fish='1', key_bait='2',
+                 tmax=17.5, tmin=2.4):
+        self.first_bait = first_bait
         self.mpos = mpos
-        self.key1, self.key2 = key1, key2
-        self.tmax = tmax
+        self.key_fish, self.key_bait = key_fish, key_bait
+        self.tmax, self.tmin = tmax, tmin
 
         self.acc, self.state, self.no = 0, 'unknown', '0-0'
         self.shutdown_acc = 0
@@ -136,7 +136,7 @@ class Agent:
         self.width = 1600
 
     def do_shutdown(self):
-        print(_t(), 'acc:', self.acc, ', do_shutdown:', self.shutdown_acc)
+        print(_t('error'), 'shutdown acc:', self.acc, ', do_shutdown:', self.shutdown_acc)
         http_get(
             'https://sctapi.ftqq.com/SCT193913TUNx0lH9vKbmWEsHHQuj7E9DX.send?title=shutdown_' + _tt('%Y-%m-%d_%H_%M_%S',
                                                                                                     False))
@@ -173,7 +173,7 @@ class Agent:
             if nn <= 0:
                 break
 
-    def do_find_float(self, _rect, t_start, cursor, h=0.32, w=0.30, hstep=3.5, wstep=5.5):
+    def get_box_mid(self, _rect, h=0.32, w=0.30):
         t = _rect[1] + self.height * 0.5 * h
         d = _rect[1] + self.height * 0.5 - self.height * 0.5 * h
         l = _rect[0] + self.width * w
@@ -181,10 +181,15 @@ class Agent:
         mid = (int((l + r) / 2), int((t + d) / 2))
         ww, hh = mid[0] - l, mid[1] - t
 
+        return mid, ww, hh
+    
+    def do_find_float(self, _rect, t_start, cursor, hstep=2.5, wstep=5.9):
+        mid, ww, hh = self.get_box_mid(_rect)
+        
         nn, pos, wn, hn = 0, mid, int(ww / wstep), int(hh / hstep)
         while time.time() - t_start <= self.tmax and abs(pos[0] - mid[0]) <= ww and abs(pos[1] - mid[1]) <= hh:
             x_moveTo(pos)
-            time.sleep(0.06)
+            time.sleep(0.04)
             _, hcursor, mpos = getCursorInfo()
             # print(_t(), 'no:', self.no, 'mpos:', mpos, 'hcursor:', hcursor)
             if hcursor != cursor:
@@ -197,10 +202,14 @@ class Agent:
         return False, (0, 0)
 
     def do_wait_bite(self, t_start):
-        while time.time() - t_start <= self.tmax:
+        t = time.time()
+        while t - t_start <= self.tmax:
             time.sleep(0.1)
             rgb = getPixel(self.mpos[0], self.mpos[1])
+            t = time.time()
             if rgb[0] < 100 or rgb[1] < 100 or rgb[2] < 100:
+                if t - t_start < self.tmin:
+                    continue
                 return True
 
         return False
@@ -208,12 +217,10 @@ class Agent:
     def run_pve_full(self, no='0-0'):
         global rect
 
-        print(_t(), 'run_pve_full no:', no)
-        self.while_delay = self.while_delay / 1.0
-
+        print(_t(), 'run_pve_full no:', no, 'first_bait:', self.first_bait)
+        
         self.acc, self.state, self.no = 0, 'init', no
-        delay, is_first = 0.2, True
-        self.shutdown_acc = 0
+        delay, self.shutdown_acc = 0.3, 0
 
         set_top_window()
         self._check_image('pve_full_init')
@@ -222,36 +229,42 @@ class Agent:
         while True:
             self.acc += 1
             rect = find_wow_window()
+
             time.sleep((random.random() + delay) / 3.0 if delay > 0 else 0.3)
 
             t_start = time.time()
-            if t_start - t_bait > 603:
+            if t_start - t_bait > self.first_bait:
                 self.state = 'bait'
                 t_bait = t_start
-                pyautogui.press(self.key2)
-                print(_t(), 'state:', self.state, 'acc:', self.acc)
+                time.sleep(0.8)
+                pyautogui.press(self.key_bait)
+                print(_t(), 'state:', self.state, 'key_bait:', self.key_bait, 'acc:', self.acc)
+                self.first_bait = 603
                 time.sleep(2.3)
 
             x_moveTo(self.width / 2, self.height / 2 + 40)
             _, cursor, _ = getCursorInfo()
 
             self.state = 'ready'
-            pyautogui.press(self.key1)
-            print(_t(), 'state:', self.state, 'acc:', self.acc)
+            pyautogui.press(self.key_fish)
+            print(_t(), 'state:', self.state, 'key_fish:', self.key_fish, 'acc:', self.acc)
             time.sleep(0.1)
 
             self.state = 'find'
             found, pos = self.do_find_float(rect, t_start, cursor)
             if found:
-                self.state = 'wait'
+                self.state = 'found'
                 print(_t(), 'state:', self.state, 'pos:', pos, 'acc:', self.acc)
-                time.sleep(1.3)
                 found = self.do_wait_bite(t_start)
                 if found:
-                    time.sleep(0.1)
+                    self.state = 'got'
+                    print(_t(), 'state:', self.state, 'pos:', pos, 'acc:', self.acc)
+                    time.sleep(0.05)
                     pyautogui.click()
+                    time.sleep(0.05)
+                    r_click(pos)
                     self.shutdown_acc = 0
-                    time.sleep(0.3)
+                    time.sleep(0.4)
 
             if not found:
                 set_top_window()
@@ -293,26 +306,30 @@ class Logger(object):
         self.log = None
 
 
-def main(cfg='w_pve.txt', as_test=0):
-    tip = "请启动wow，将wow调至窗口模式，分辨率设为1600x1200，画质设为高 参考 w_pve.txt 修改配置文件"
-    if not pyautogui.confirm(text=tip) == "OK":
+def main(cfg='w_script.txt', as_test=0, _first_bait=None):
+    tip = "请将wow调至1600x1200窗口模式，first_bait:"
+    _first_bait = pyautogui.confirm(text=tip)
+    _first_bait = _first_bait.strip() if _first_bait else _first_bait
+    if _first_bait is None:
         return
 
     with open(cfg, 'r', encoding='utf-8') as f:
         lines = f.readlines()
 
     line_num = 3
-    assert len(lines) >= line_num, 'must has ' + str(line_num) + ' lines: while_delay, delay, hh_delay'
-    while_delay, delay, hh_delay = lines[:line_num]
+    assert len(lines) >= line_num, 'must has ' + str(line_num) + ' lines: keys, delay, first_bait'
+    keys, delay, first_bait = lines[:line_num]
 
-    while_delay = float(while_delay.split('#')[0].strip())
+    keys = keys.split('#')[0].strip().split(' ')
+    assert len(keys) == 2, 'keys must as key_fish key_bait'
     delay = float(delay.split('#')[0].strip())
-    hh_delay = float(hh_delay.split('#')[0].strip())
+    first_bait = float(first_bait.split('#')[0].strip())
+    first_bait = float(_first_bait) if _first_bait.isdigit() else first_bait
 
     _no = (lines[line_num]).split('#')[0].strip() if len(lines) > line_num else '0-0'
 
     try:
-        lf = os.path.join(os.getcwd(), 'logs', 'w_pve%s[%d] %s.log' % (
+        lf = os.path.join(os.getcwd(), 'logs', 'w_script%s[%d] %s.log' % (
             '_test ' if as_test else '', os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False)))
         sys.stdout = Logger(lf)
 
@@ -322,7 +339,7 @@ def main(cfg='w_pve.txt', as_test=0):
         winsound.Beep(600, 500)
 
         pyautogui.PAUSE = delay
-        agent = Agent(while_delay=while_delay, hh_delay=hh_delay, mpos=mpos)
+        agent = Agent(key_fish=keys[0], key_bait=keys[1], first_bait=first_bait, mpos=mpos)
 
         print(_t(), 'no:', _no, 'mpos:', mpos, 'rgb:', rgb, 'hcursor:', hcursor)
         agent.run(_no) if not as_test else agent.run_test(_no)
