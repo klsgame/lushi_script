@@ -19,6 +19,47 @@ import win32api
 import win32con
 import win32gui
 
+import winerror
+import pywintypes
+
+dc = ctypes.windll.user32.GetDC(0)
+
+
+def getPixel(x, y):
+    global dc
+
+    color_ref = ctypes.windll.gdi32.GetPixel(dc, x,
+                                            y)  # A COLORREF value as 0x00bbggrr. See
+    # https://docs.microsoft.com/en-us/windows/win32/gdi/colorref
+    red = color_ref % 256
+    color_ref //= 256
+    green = color_ref % 256
+    color_ref //= 256
+    blue = color_ref
+
+    return red, green, blue
+
+
+def getCursorInfo():
+    """
+    Safe version of win32gui.GetCursorInfo()
+    Use this function instead. Due to security restrictions, win32gui.GetCursorPos()
+    throws access-denied exception when the workstation is locked.
+    This functions returns 0, 0 coordinates in such case.
+    """
+    try:
+        flags, hcursor, (mx, my) = win32gui.GetCursorInfo()
+    except pywintypes.error as e:
+        # This error occurs when workstation is locked
+        if e.winerror == winerror.ERROR_ACCESS_DENIED:
+            flags = win32con.CURSOR_SHOWING
+            hcursor = None
+            mx, my = 0, 0
+        else:
+            raise
+    return flags, hcursor, mx, my
+
+
 def findTopWindow(wantedText=None, wantedClass=None, selectionFunction=None):
     '''Find the hwnd of a top level window.
     You can identify windows using captions, classes, a custom selection
@@ -43,11 +84,12 @@ def findTopWindow(wantedText=None, wantedClass=None, selectionFunction=None):
         return topWindows[0]
     else:
         raise WinGuiAutoError("No top level window found for wantedText=" +
-                               repr(wantedText) +
-                               ", wantedClass=" +
-                               repr(wantedClass) +
-                               ", selectionFunction=" +
-                               repr(selectionFunction))
+                              repr(wantedText) +
+                              ", wantedClass=" +
+                              repr(wantedClass) +
+                              ", selectionFunction=" +
+                              repr(selectionFunction))
+
 
 def findTopWindows(wantedText=None, wantedClass=None, selectionFunction=None):
     '''Find the hwnd of top level windows.
@@ -81,6 +123,7 @@ def findTopWindows(wantedText=None, wantedClass=None, selectionFunction=None):
         results.append(hwnd)
     return results
 
+
 def dumpWindow(hwnd):
     '''Dump all controls from a window into a nested list
     Useful during development, allowing to you discover the structure of the
@@ -108,6 +151,7 @@ def dumpWindow(hwnd):
         if window_content:
             window.append(window_content)
     return windows
+
 
 def findControl(topHwnd,
                 wantedText=None,
@@ -147,13 +191,14 @@ def findControl(topHwnd,
         return controls[0]
     else:
         raise WinGuiAutoError("No control found for topHwnd=" +
-                               repr(topHwnd) +
-                               ", wantedText=" +
-                               repr(wantedText) +
-                               ", wantedClass=" +
-                               repr(wantedClass) +
-                               ", selectionFunction=" +
-                               repr(selectionFunction))
+                              repr(topHwnd) +
+                              ", wantedText=" +
+                              repr(wantedText) +
+                              ", wantedClass=" +
+                              repr(wantedClass) +
+                              ", selectionFunction=" +
+                              repr(selectionFunction))
+
 
 def findControls(topHwnd,
                  wantedText=None,
@@ -182,6 +227,7 @@ def findControls(topHwnd,
                             return windowClass == "Button"
                         buttons = findControl(optDialog, wantedText="Button")
                         '''
+
     def searchChildWindows(currentHwnd):
         results = []
         childWindows = []
@@ -199,18 +245,19 @@ def findControls(topHwnd,
                 results += descendentMatchingHwnds
 
             if wantedText and \
-               not _normaliseText(wantedText) in _normaliseText(windowText):
+                    not _normaliseText(wantedText) in _normaliseText(windowText):
                 continue
             if wantedClass and \
-               not windowClass == wantedClass:
+                    not windowClass == wantedClass:
                 continue
             if selectionFunction and \
-               not selectionFunction(childHwnd):
+                    not selectionFunction(childHwnd):
                 continue
             results.append(childHwnd)
         return results
 
     return searchChildWindows(topHwnd)
+
 
 def getTopMenu(hWnd):
     '''Get a window's main, top level menu.
@@ -223,6 +270,7 @@ def getTopMenu(hWnd):
 
     Usage example:  hMenu = getTopMenu(hWnd)'''
     return ctypes.windll.user32.GetMenu(ctypes.c_long(hWnd))
+
 
 def activateMenuItem(hWnd, menuItemPath):
     '''Activate a menu item
@@ -259,11 +307,11 @@ def activateMenuItem(hWnd, menuItemPath):
 
     # Walk down submenus
     for submenu in menuItemPath[:-1]:
-        try: # submenu is an index
+        try:  # submenu is an index
             0 + submenu
             submenuInfo = getMenuInfo(hMenu, submenu)
             hMenu, hMenuItemCount = submenuInfo.submenu, submenuInfo.itemCount
-        except TypeError: # Hopefully, submenu is a menu name
+        except TypeError:  # Hopefully, submenu is a menu name
             try:
                 dump, hMenu, hMenuItemCount = _findNamedSubmenu(hMenu,
                                                                 hMenuItemCount,
@@ -275,15 +323,15 @@ def activateMenuItem(hWnd, menuItemPath):
 
     # Get required menu item's ID. (the one at the end).
     menuItem = menuItemPath[-1]
-    try: # menuItem is an index
+    try:  # menuItem is an index
         0 + menuItem
         menuItemID = ctypes.windll.user32.GetMenuItemID(hMenu,
                                                         menuItem)
-    except TypeError: # Hopefully, menuItem is a menu name
+    except TypeError:  # Hopefully, menuItem is a menu name
         try:
             subMenuIndex, dump, dump = _findNamedSubmenu(hMenu,
-                                        hMenuItemCount,
-                                        menuItem)
+                                                         hMenuItemCount,
+                                                         menuItem)
         except WinGuiAutoError:
             raise WinGuiAutoError("Menu path " +
                                   repr(menuItemPath) +
@@ -293,6 +341,7 @@ def activateMenuItem(hWnd, menuItemPath):
 
     # Activate
     win32gui.PostMessage(hWnd, win32con.WM_COMMAND, menuItemID, 0)
+
 
 def getMenuInfo(hMenu, uIDItem):
     '''Get various info about a menu item.
@@ -313,9 +362,11 @@ def getMenuInfo(hMenu, uIDItem):
 
     Usage example:      submenuInfo = getMenuInfo(hMenu, submenu)
                         hMenu, hMenuItemCount = submenuInfo.submenu, submenuInfo.itemCount'''
+
     # An object to hold the menu info
     class MenuInfo(Bunch):
         pass
+
     menuInfo = MenuInfo()
 
     # Menu state
@@ -324,9 +375,9 @@ def getMenuInfo(hMenu, uIDItem):
                                                   win32con.MF_BYPOSITION)
     if menuState == -1:
         raise WinGuiAutoError("No such menu item, hMenu=" +
-                               str(hMenu) +
-                               " uIDItem=" +
-                               str(uIDItem))
+                              str(hMenu) +
+                              " uIDItem=" +
+                              str(uIDItem))
     menuInfo.isChecked = bool(menuState & win32con.MF_CHECKED)
     menuInfo.isDisabled = bool(menuState & win32con.MF_DISABLED)
     menuInfo.isGreyed = bool(menuState & win32con.MF_GRAYED)
@@ -351,6 +402,7 @@ def getMenuInfo(hMenu, uIDItem):
 
     return menuInfo
 
+
 def clickButton(hwnd):
     '''Simulates a single mouse click on a button
 
@@ -364,6 +416,7 @@ def clickButton(hwnd):
     '''
     _sendNotifyMessage(hwnd, win32con.BN_CLICKED)
 
+
 def clickStatic(hwnd):
     '''Simulates a single mouse click on a static
 
@@ -374,6 +427,7 @@ def clickStatic(hwnd):
     '''
     _sendNotifyMessage(hwnd, win32con.STN_CLICKED)
 
+
 def doubleClickStatic(hwnd):
     '''Simulates a double mouse click on a static
 
@@ -383,6 +437,7 @@ def doubleClickStatic(hwnd):
     Usage example:  TODO
     '''
     _sendNotifyMessage(hwnd, win32con.STN_DBLCLK)
+
 
 def getComboboxItems(hwnd):
     '''Returns the items in a combo box control.
@@ -397,8 +452,9 @@ def getComboboxItems(hwnd):
     '''
 
     return _getMultipleWindowValues(hwnd,
-                                     getCountMessage=win32con.CB_GETCOUNT,
-                                     getValueMessage=win32con.CB_GETLBTEXT)
+                                    getCountMessage=win32con.CB_GETCOUNT,
+                                    getValueMessage=win32con.CB_GETLBTEXT)
+
 
 def selectComboboxItem(hwnd, item):
     '''Selects a specified item in a Combo box control.
@@ -412,14 +468,15 @@ def selectComboboxItem(hwnd, item):
                     selectComboboxItem(fontCombo,
                                        random.choice(fontComboItems))
     '''
-    try: # item is an index Use this to select
+    try:  # item is an index Use this to select
         0 + item
         win32gui.SendMessage(hwnd, win32con.CB_SETCURSEL, item, 0)
         _sendNotifyMessage(hwnd, win32con.CBN_SELCHANGE)
-    except TypeError: # Item is a string - find the index, and use that
+    except TypeError:  # Item is a string - find the index, and use that
         items = getComboboxItems(hwnd)
         itemIndex = items.index(item)
         selectComboboxItem(hwnd, itemIndex)
+
 
 def getListboxItems(hwnd):
     '''Returns the items in a list box control.
@@ -433,8 +490,9 @@ def getListboxItems(hwnd):
     '''
 
     return _getMultipleWindowValues(hwnd,
-                                     getCountMessage=win32con.LB_GETCOUNT,
-                                     getValueMessage=win32con.LB_GETTEXT)
+                                    getCountMessage=win32con.LB_GETCOUNT,
+                                    getValueMessage=win32con.LB_GETTEXT)
+
 
 def selectListboxItem(hwnd, item):
     '''Selects a specified item in a list box control.
@@ -446,14 +504,15 @@ def selectListboxItem(hwnd, item):
 
     Usage example:  TODO
     '''
-    try: # item is an index Use this to select
+    try:  # item is an index Use this to select
         0 + item
         win32gui.SendMessage(hwnd, win32con.LB_SETCURSEL, item, 0)
         _sendNotifyMessage(hwnd, win32con.LBN_SELCHANGE)
-    except TypeError: # Item is a string - find the index, and use that
+    except TypeError:  # Item is a string - find the index, and use that
         items = getListboxItems(hwnd)
         itemIndex = items.index(item)
         selectListboxItem(hwnd, itemIndex)
+
 
 def getEditText(hwnd):
     '''Returns the text in an edit control.
@@ -468,6 +527,7 @@ def getEditText(hwnd):
     return _getMultipleWindowValues(hwnd,
                                     getCountMessage=win32con.EM_GETLINECOUNT,
                                     getValueMessage=win32con.EM_GETLINE)
+
 
 def setEditText(hwnd, text, append=False):
     '''Set an edit control's text.
@@ -523,6 +583,7 @@ def setEditText(hwnd, text, append=False):
                          True,
                          os.linesep.join(text))
 
+
 def _getMultipleWindowValues(hwnd, getCountMessage, getValueMessage):
     '''A common pattern in the Win32 API is that in order to retrieve a
     series of values, you use one message to get a count of available
@@ -551,12 +612,14 @@ def _getMultipleWindowValues(hwnd, getCountMessage, getValueMessage):
 
     return result
 
+
 def _windowEnumerationHandler(hwnd, resultList):
     '''Pass to win32gui.EnumWindows() to generate list of window handle,
     window text, window class tuples.'''
     resultList.append((hwnd,
                        win32gui.GetWindowText(hwnd),
                        win32gui.GetClassName(hwnd)))
+
 
 def _buildWinLong(high, low):
     '''Build a windows long parameter from high and low words.
@@ -566,7 +629,8 @@ def _buildWinLong(high, low):
     return int(struct.unpack('>L',
                              struct.pack('>2H',
                                          high,
-                                         low)) [0])
+                                         low))[0])
+
 
 def _sendNotifyMessage(hwnd, nofifyMessage):
     '''Send a notify message to a control.'''
@@ -577,10 +641,12 @@ def _sendNotifyMessage(hwnd, nofifyMessage):
                                                               win32con.GWL_ID)),
                          hwnd)
 
+
 def _normaliseText(controlText):
     '''Remove '&' characters, and lower case.
     Useful for matching control text.'''
     return controlText.lower().replace('&', '')
+
 
 def _findNamedSubmenu(hMenu, hMenuItemCount, submenuName):
     '''Find the index number of a menu's submenu with a specific name.'''
@@ -608,8 +674,10 @@ class Bunch(object):
                  in list(self.__dict__.items())]
         return '\n'.join(state)
 
+
 class WinGuiAutoError(Exception):
     pass
+
 
 if __name__ == '__main__':
     # Test - drives notepad.
@@ -725,7 +793,7 @@ if __name__ == '__main__':
     print("getListboxItems(docType)=", typeListBox)
 
     print("Select a type at random")
-    selectListboxItem(docType, random.randint(0, len(typeListBox)-1))
+    selectListboxItem(docType, random.randint(0, len(typeListBox) - 1))
     time.sleep(.5)
     clickButton(findControl(newDialog, wantedClass="Button", wantedText="OK"))
 
