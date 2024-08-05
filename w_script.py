@@ -308,7 +308,7 @@ class Logger(object):
 
 def main(cfg='w_script.txt', as_test=0, _first_bait=None):
     tip = "请将wow调至1600x1200窗口模式，first_bait:"
-    _first_bait = pyautogui.confirm(text=tip)
+    _first_bait = pyautogui.prompt(text=tip)
     _first_bait = _first_bait.strip() if _first_bait else _first_bait
     if _first_bait is None:
         return
