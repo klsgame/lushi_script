@@ -241,7 +241,7 @@ class Agent:
 
             time.sleep((random.random() + delay) / 3.0 if delay > 0 else 0.3)
 
-            t_start = time.time()
+            found, check, t_start = False, '', time.time()
             if t_start - t_bait > self.first_bait:
                 self.state = 'bait'
                 t_bait = t_start
@@ -277,23 +277,18 @@ class Agent:
                             self.check_pos = cpos
 
                     if rgb[0] > 50 or rgb[2] > 50:
-                        self.state = 'retry'
-                        self.shutdown_acc += 0.1
-                        print(_t(), 'state:', self.state, 'cpos:', cpos, 'rgb:', rgb, 'shutdown_acc:', self.shutdown_acc)
-                        self._check_image('retry-%d' % (self.shutdown_acc,)) if self.shutdown_acc % 5 == 0 else None
-                        if self.check_shutdown_acc(self.shutdown_acc):
-                            break
-                        continue
-                    
-                self.state = 'auto'
-                print(_t(), 'state:', self.state, 'acc:', self.acc)
-                found = self.do_wait_bite(t_start)
-                if found:
-                    self.state = 'got'
-                    print(_t(), 'state:', self.state, 'press:', self.key_auto, 'acc:', self.acc)
-                    time.sleep(0.1)
-                    pyautogui.press(self.key_auto)
-                    time.sleep(0.1)
+                        check = 'retry'
+
+                if check == '':
+                    self.state = 'auto'
+                    print(_t(), 'state:', self.state, 'acc:', self.acc)
+                    found = self.do_wait_bite(t_start)
+                    if found:
+                        self.state = 'got'
+                        print(_t(), 'state:', self.state, 'press:', self.key_auto, 'acc:', self.acc)
+                        time.sleep(0.1)
+                        pyautogui.press(self.key_auto)
+                        time.sleep(0.1)
             else:
                 self.state = 'find'
                 found, pos = self.do_find_float(rect, t_start, cursor)
@@ -313,15 +308,15 @@ class Agent:
                 self.acc += 1
                 self.shutdown_acc = 0
                 time.sleep(0.4)
-            else:
-                set_top_window()
-                self.state = 'error'
-                print(_t(), 'state:', self.state, 'acc:', self.acc, 'shutdown_acc:', self.shutdown_acc)
+                continue
 
-                self.shutdown_acc += 1
-                self._check_image('empty-%d' % (self.shutdown_acc,)) if self.shutdown_acc % 5 == 0 else None
-                if self.check_shutdown_acc(self.shutdown_acc):
-                    break
+            set_top_window() if check == '' else None
+            self.state = 'empty' if check == '' else check
+            self.shutdown_acc += 0.1 if check == 'retry' else 1
+            print(_t(), 'state:', self.state, 'acc:', self.acc, 'shutdown_acc: %.2f' % (self.shutdown_acc, ))
+            self._check_image('%s-%.2f' % (self.state, self.shutdown_acc)) if self.shutdown_acc % 5 < 0.001 else None
+            if self.check_shutdown_acc(self.shutdown_acc):
+                break
 
     def _check_image(self, tag='', pp='tmp', level='warn'):
         fname = os.path.join(os.getcwd(), pp,
@@ -352,8 +347,8 @@ class Logger(object):
 
 
 def main(cfg='w_script.txt', as_test=0, _first_bait=None):
-    tip = "请将wow调至1600x1200窗口模式，first_bait:"
-    _first_bait = pyautogui.prompt(text=tip)
+    tip = "请将wow调至 1600x1200 窗口模式，鱼饵剩余:"
+    _first_bait = pyautogui.prompt(text=tip, default='0')
     _first_bait = _first_bait.strip() if _first_bait else _first_bait
     if _first_bait is None:
         return
