@@ -122,18 +122,20 @@ def _next_pos(mid, nn, wn, hn):
 
 class Agent:
 
-    def __init__(self, mpos, first_bait=300, key_fish='1', key_bait='2',
-                 tmax=17.5, tmin=2.4):
+    def __init__(self, mpos, cpos=None, first_bait=300, key_fish='1', key_bait='2', key_auto='',
+                 tmax=17.5, tmin=2.4, wh=(1600, 1200)):
         self.first_bait = first_bait
         self.mpos = mpos
-        self.key_fish, self.key_bait = key_fish, key_bait
+        self.key_fish, self.key_bait, self.key_auto = key_fish, key_bait, key_auto
         self.tmax, self.tmin = tmax, tmin
 
         self.acc, self.state, self.no = 0, 'unknown', '0-0'
-        self.shutdown_acc = 0
-
-        self.height = 1200
-        self.width = 1600
+        self.check_pos, self.shutdown_acc = None, 0
+        
+        if cpos and cpos[0] > 0 and cpos[1] > 0:
+            self.check_pos = cpos
+            
+        self.width, self.height = wh
 
     def do_shutdown(self):
         print(_t('error'), 'shutdown acc:', self.acc, ', do_shutdown:', self.shutdown_acc)
@@ -225,7 +227,7 @@ class Agent:
         set_top_window()
         self._check_image('pve_full_init')
 
-        t_bait = time.time()
+        t_bait, cursor = time.time(), 0
         while True:
             self.acc += 1
             rect = find_wow_window()
@@ -238,42 +240,76 @@ class Agent:
                 t_bait = t_start
                 time.sleep(0.8)
                 pyautogui.press(self.key_bait)
-                print(_t(), 'state:', self.state, 'key_bait:', self.key_bait, 'acc:', self.acc)
+                print(_t(), 'state:', self.state, 'press:', self.key_bait, 'acc:', self.acc)
                 self.first_bait = 603
                 time.sleep(2.3)
 
-            x_moveTo(self.width / 2, self.height / 2 + 40)
-            _, cursor, _ = getCursorInfo()
+            if not self.key_auto:
+                x_moveTo(self.width / 2, self.height / 2 + 40)
+                _, cursor, _ = getCursorInfo()
 
             self.state = 'ready'
             pyautogui.press(self.key_fish)
-            print(_t(), 'state:', self.state, 'key_fish:', self.key_fish, 'acc:', self.acc)
-            time.sleep(0.1)
+            print(_t(), 'state:', self.state, 'press:', self.key_fish, 'acc:', self.acc)
+            time.sleep(0.4)
 
-            self.state = 'find'
-            found, pos = self.do_find_float(rect, t_start, cursor)
-            if found:
-                self.state = 'found'
-                print(_t(), 'state:', self.state, 'pos:', pos, 'acc:', self.acc)
+            if self.key_auto:
+                if self.check_pos or self.acc >= 3:
+                    self.state = 'check'
+                    if self.check_pos:
+                        mpos = (rect[0]+self.check_pos[0], rect[1]+self.check_pos[1])
+                    else:
+                        _, _, mpos = getCursorInfo()
+                        
+                    rgb = getPixel(mpos[0], mpos[1])
+                    cpos = (mpos[0]-rect[0], mpos[1]-rect[1])
+
+                    if self.check_pos is None:
+                        print(_t(), 'state:', self.state, 'cpos:', cpos, 'rgb:', rgb, 'acc:', self.acc)
+                        if rgb[0] < 20 and rgb[2] < 20 and rgb[1] > 100:
+                            self.check_pos = cpos
+
+                    if rgb[0] > 50 or rgb[2] > 50:
+                        self.state = 'retry'
+                        self.shutdown_acc += 0.1
+                        print(_t(), 'state:', self.state, 'cpos:', cpos, 'rgb:', rgb, 'shutdown_acc:', self.shutdown_acc)
+                        continue
+                    
+                self.state = 'auto'
+                print(_t(), 'state:', self.state, 'acc:', self.acc)
                 found = self.do_wait_bite(t_start)
                 if found:
                     self.state = 'got'
+                    print(_t(), 'state:', self.state, 'press:', self.key_auto, 'acc:', self.acc)
+                    time.sleep(0.1)
+                    pyautogui.press(self.key_auto)
+                    time.sleep(0.1)
+            else:
+                self.state = 'find'
+                found, pos = self.do_find_float(rect, t_start, cursor)
+                if found:
+                    self.state = 'found'
                     print(_t(), 'state:', self.state, 'pos:', pos, 'acc:', self.acc)
-                    time.sleep(0.05)
-                    pyautogui.click()
-                    time.sleep(0.05)
-                    r_click(pos)
-                    self.shutdown_acc = 0
-                    time.sleep(0.4)
+                    found = self.do_wait_bite(t_start)
+                    if found:
+                        self.state = 'got'
+                        print(_t(), 'state:', self.state, 'pos:', pos, 'acc:', self.acc)
+                        time.sleep(0.05)
+                        pyautogui.click()
+                        time.sleep(0.05)
+                        r_click(pos)
 
-            if not found:
+            if found:
+                self.shutdown_acc = 0
+                time.sleep(0.4)
+            else:
                 set_top_window()
                 self.state = 'error'
                 print(_t(), 'state:', self.state, 'acc:', self.acc, 'shutdown_acc:', self.shutdown_acc)
 
                 self.shutdown_acc += 1
                 # self._check_image('empty-%d' % (self.shutdown_acc,))
-                if self.shutdown_acc > 10:
+                if self.shutdown_acc > 30:
                     self.do_shutdown()
                     self._check_image('shutdown')
                     break
@@ -321,28 +357,38 @@ def main(cfg='w_script.txt', as_test=0, _first_bait=None):
     keys, delay, first_bait = lines[:line_num]
 
     keys = keys.split('#')[0].strip().split(' ')
-    assert len(keys) == 2, 'keys must as key_fish key_bait'
+    assert len(keys) >= 2, 'keys must as key_fish key_bait key_auto'
+    _cpos = keys[3].strip() if len(keys) > 3 else '0-0'
+    cpos = (int(_cpos.split('-')[0]), int(_cpos.split('-')[1])) if '-' in _cpos else (0, 0)
+    
     delay = float(delay.split('#')[0].strip())
     first_bait = float(first_bait.split('#')[0].strip())
     first_bait = float(_first_bait) if _first_bait.isdigit() else first_bait
 
-    _no = (lines[line_num]).split('#')[0].strip() if len(lines) > line_num else '0-0'
-
+    _mpos = (lines[line_num]).split('#')[0].strip() if len(lines) > line_num else '0-0'
+    mpos = (int(_mpos.split('-')[0]), int(_mpos.split('-')[1])) if '-' in _mpos else (0, 0)
+    
     try:
         lf = os.path.join(os.getcwd(), 'logs', 'w_script%s[%d] %s.log' % (
             '_test ' if as_test else '', os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False)))
         sys.stdout = Logger(lf)
 
-        time.sleep(3)
-        flags, hcursor, mpos = getCursorInfo()
-        rgb = getPixel(mpos[0], mpos[1])
-        winsound.Beep(600, 500)
-
+        if mpos and mpos[0] > 0 and mpos[1] > 0:
+            rgb = getPixel(mpos[0], mpos[1])
+            print(_t(), 'config _mpos:', _mpos, 'mpos:', mpos, 'rgb:', rgb)
+        else:
+            time.sleep(3)
+            _, _, mpos = getCursorInfo()
+            rgb = getPixel(mpos[0], mpos[1])
+            winsound.Beep(600, 500)
+            print(_t(), 'found _mpos:', _mpos, 'mpos:', mpos, 'rgb:', rgb)
+                   
         pyautogui.PAUSE = delay
-        agent = Agent(key_fish=keys[0], key_bait=keys[1], first_bait=first_bait, mpos=mpos)
+        agent = Agent(key_fish=keys[0], key_bait=keys[1], key_auto=keys[2] if len(keys) > 2 else '', 
+            first_bait=first_bait, mpos=mpos, cpos=cpos)
 
-        print(_t(), 'no:', _no, 'mpos:', mpos, 'rgb:', rgb, 'hcursor:', hcursor)
-        agent.run(_no) if not as_test else agent.run_test(_no)
+ 
+        agent.run(_mpos) if not as_test else agent.run_test(_mpos)
     finally:
         sys.stdout.reset()
 
