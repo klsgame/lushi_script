@@ -216,6 +216,14 @@ class Agent:
 
         return False
 
+    def check_shutdown_acc(self, shutdown_acc, limit=30):
+        if shutdown_acc > limit:
+            self.do_shutdown()
+            self._check_image('shutdown')
+            return True
+            
+        return False
+        
     def run_pve_full(self, no='0-0'):
         global rect
 
@@ -229,7 +237,6 @@ class Agent:
 
         t_bait, cursor = time.time(), 0
         while True:
-            self.acc += 1
             rect = find_wow_window()
 
             time.sleep((random.random() + delay) / 3.0 if delay > 0 else 0.3)
@@ -273,6 +280,9 @@ class Agent:
                         self.state = 'retry'
                         self.shutdown_acc += 0.1
                         print(_t(), 'state:', self.state, 'cpos:', cpos, 'rgb:', rgb, 'shutdown_acc:', self.shutdown_acc)
+                        self._check_image('retry-%d' % (self.shutdown_acc,)) if self.shutdown_acc % 5 == 0 else None
+                        if self.check_shutdown_acc(self.shutdown_acc):
+                            break
                         continue
                     
                 self.state = 'auto'
@@ -300,6 +310,7 @@ class Agent:
                         r_click(pos)
 
             if found:
+                self.acc += 1
                 self.shutdown_acc = 0
                 time.sleep(0.4)
             else:
@@ -308,10 +319,8 @@ class Agent:
                 print(_t(), 'state:', self.state, 'acc:', self.acc, 'shutdown_acc:', self.shutdown_acc)
 
                 self.shutdown_acc += 1
-                # self._check_image('empty-%d' % (self.shutdown_acc,))
-                if self.shutdown_acc > 30:
-                    self.do_shutdown()
-                    self._check_image('shutdown')
+                self._check_image('empty-%d' % (self.shutdown_acc,)) if self.shutdown_acc % 5 == 0 else None
+                if self.check_shutdown_acc(self.shutdown_acc):
                     break
 
     def _check_image(self, tag='', pp='tmp', level='warn'):
