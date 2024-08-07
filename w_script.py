@@ -123,7 +123,7 @@ def _next_pos(mid, nn, wn, hn):
 class Agent:
 
     def __init__(self, mpos, cpos=None, first_bait=300, key_fish='1', key_bait='2', key_auto='',
-                 tmax=17.5, tmin=2.4, wh=(1600, 1200)):
+                 tmax=16.9, tmin=3.5, wh=(1600, 1200)):
         self.first_bait = first_bait
         self.mpos = mpos
         self.key_fish, self.key_bait, self.key_auto = key_fish, key_bait, key_auto
@@ -273,10 +273,10 @@ class Agent:
 
                     if self.check_pos is None:
                         print(_t(), 'state:', self.state, 'cpos:', cpos, 'rgb:', rgb, 'acc:', self.acc)
-                        if rgb[0] < 20 and rgb[2] < 20 and rgb[1] > 100:
+                        if rgb[0] < 20 and rgb[2] < 20 and rgb[1] > 120:
                             self.check_pos = cpos
 
-                    if rgb[0] > 50 or rgb[2] > 50:
+                    if rgb[0] > 50 or rgb[2] > 50 or rgb[1] < 120:
                         check = 'retry'
 
                 if check == '':
@@ -314,7 +314,7 @@ class Agent:
             self.state = 'empty' if check == '' else check
             self.shutdown_acc += 0.1 if check == 'retry' else 1
             print(_t(), 'state:', self.state, 'acc:', self.acc, 'shutdown_acc: %.2f' % (self.shutdown_acc, ))
-            self._check_image('%s-%.2f' % (self.state, self.shutdown_acc)) if self.shutdown_acc % 5 < 0.001 else None
+            self._check_image('%s-%d' % (self.state, int(self.shutdown_acc*10))) if int(self.shutdown_acc*10) % 50 == 0 else None
             if self.check_shutdown_acc(self.shutdown_acc):
                 break
 
