@@ -218,8 +218,8 @@ class Agent:
 
     def check_shutdown_acc(self, shutdown_acc, limit=30):
         if shutdown_acc > limit:
-            self.do_shutdown()
             self._check_image('shutdown')
+            self.do_shutdown()
             return True
             
         return False
@@ -314,7 +314,7 @@ class Agent:
             self.state = 'empty' if check == '' else check
             self.shutdown_acc += 0.1 if check == 'retry' else 1
             print(_t(), 'state:', self.state, 'acc:', self.acc, 'shutdown_acc: %.2f' % (self.shutdown_acc, ))
-            self._check_image('%s-%d' % (self.state, int(self.shutdown_acc*10))) if int(self.shutdown_acc*10) % 50 == 0 else None
+            self._check_image('%s-%d' % (self.state, int(self.shutdown_acc*10))) if int(self.shutdown_acc*10) % 30 == 0 else None
             if self.check_shutdown_acc(self.shutdown_acc):
                 break
 
@@ -373,8 +373,8 @@ def main(cfg='w_script.txt', as_test=0, _first_bait=None):
     mpos = (int(_mpos.split('-')[0]), int(_mpos.split('-')[1])) if '-' in _mpos else (0, 0)
     
     try:
-        lf = os.path.join(os.getcwd(), 'logs', 'w_script%s[%d] %s.log' % (
-            '_test ' if as_test else '', os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False)))
+        lf = os.path.join(os.getcwd(), 'logs', 'w_script%s[%d-%d] %s.log' % (
+            '_test ' if as_test else '', os.getpid(), os.getppid(), _tt('%Y-%m-%d_%H_%M_%S', False)))
         sys.stdout = Logger(lf)
 
         if mpos and mpos[0] > 0 and mpos[1] > 0:
