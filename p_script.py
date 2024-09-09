@@ -105,21 +105,30 @@ def getImgPixel(x, y):
     return color
 
 
-def getImgState(_rect, mpos, cpos, acc):
+def sameColor(rgb, origin, limit=10):
+    a = (origin[0] - limit, origin[1] - limit, origin[2] - limit)
+    b = (origin[0] + limit, origin[1] + limit, origin[2] + limit)
+    return (a[0] < rgb[0] < b[0]) and (a[1] < rgb[1] < b[1]) and (a[2] < rgb[2] < b[2])
+
+
+def getImgState(_rect, mpos, cpos, acc, crgb_=(5, 112, 30), mrgb_=(64, 8, 11)):
     image = pyautogui.screenshot()
+
     xy = (_rect[0] + cpos[0], _rect[1] + cpos[1])
-    rgb = image.getpixel(xy)
-    if rgb[0] > 25 or rgb[2] > 65 or rgb[1] < 160:  # rgb(12, 186, 52)
+    crgb = image.getpixel(xy)
+
+    xy = (_rect[0] + mpos[0], _rect[1] + mpos[1])
+    mrgb = image.getpixel(xy)
+
+    if not sameColor(crgb, crgb_):
         state = 'retry'
     else:
         state = 'battle'
-        xy = (_rect[0] + mpos[0], _rect[1] + mpos[1])
-        rgb = image.getpixel(xy)
-        if rgb[0] > 55 and rgb[2] < 35 and rgb[1] < 40:  # rgb(62, 33, 25)
+        if sameColor(mrgb, mrgb_):
             state = 'auto'
 
-    if (acc <= 10 and state == 'retry') or state == 'auto':
-        print(_t(), 'state:', state, 'mpos:', mpos, 'cpos:', cpos, 'rgb:', rgb, 'acc:', acc)
+    if (acc <= 20 and state == 'retry') or (acc <= 5 and state == 'auto'):
+        print(_t(), state, f'{cpos[0]}-{cpos[1]}:', crgb, f'{mpos[0]}-{mpos[1]}:', mrgb, acc)
 
     return state
 
@@ -190,10 +199,11 @@ class Agent:
     def run_pve_full(self, no='0-0'):
         global rect
 
+        _acc = lambda: '%d-%.2f' % (self.acc, self.shutdown_acc)
         print(_t(), 'run_pve_full no:', no)
 
         self.acc, self.state, self.no = 0, 'init', no
-        delay, self.shutdown_acc = 0.3, 0
+        delay, self.shutdown_acc = 0, 0.0
 
         set_top_window()
         self._check_image('pve_full_init')
@@ -205,27 +215,27 @@ class Agent:
             time.sleep((random.random() + delay) / 3.0 if delay > 0 else 0.3)
 
             self.state = getImgState(rect, self.mpos, self.check_pos, self.acc)
-            if self.state in ['retry', 'init', 'ready']:
+            if self.state in ['retry', 'init']:
                 pyautogui.press(self.key_macro)
                 time.sleep(0.4)
                 pyautogui.press(self.key_auto)
                 time.sleep(0.4)
                 pyautogui.press(self.key_macro)
-                print(_t(), 'state:', self.state, 'press:', self.key_macro, 'acc:', self.acc)
+                print(_t(), self.state, 'press:', self.key_macro, _acc())
                 time.sleep(1.8)
 
             self.state = getImgState(rect, self.mpos, self.check_pos, self.acc)
             if self.state == 'retry':
                 set_top_window()
                 self.shutdown_acc += 0.1
-                print(_t(), 'state:', self.state, 'acc:', self.acc, 'shutdown_acc: %.2f' % (self.shutdown_acc,))
+                print(_t('error'), self.state, _acc())
                 self._check_image('%s-%d' % (self.state, int(self.shutdown_acc * 10))) if int(
                     self.shutdown_acc * 10) % 30 == 0 else None
                 if self.check_shutdown_acc(self.shutdown_acc):
                     break
                 continue
 
-            print(_t(), 'state:', self.state, 'acc:', self.acc)
+            print(_t(), self.state, 'acc:', _acc())
             while self.state in ['battle', 'auto']:
                 nn = 0
                 retry_n = 0
@@ -239,11 +249,11 @@ class Agent:
                         break
 
                 if self.state == 'auto':
-                    pyautogui.press(self.key_battle) if len(self.key_battle) == 1 else pyautogui.scroll(-3)
-                    print(_t(), 'state:', self.state, 'press:', self.key_battle, 'acc:', self.acc)
+                    self.shutdown_acc = 0
+                    pyautogui.press(self.key_battle) if len(self.key_battle) == 1 else \
+                        (pyautogui.scroll(-3) if self.key_battle == 'wd' else pyautogui.scroll(3))
+                    print(_t(), self.state, 'press:', self.key_battle, _acc())
                     time.sleep(1.8)
-
-            self.state = 'ready'
 
     def _check_image(self, tag='', pp='tmp', level='warn'):
         fname = os.path.join(os.getcwd(), pp,
@@ -283,9 +293,9 @@ def main(cfg='p_script.txt', as_test=0, _first_battle=None):
     with open(cfg, 'r', encoding="utf-8") as f:
         lines = f.readlines()
 
-    line_num = 3
-    assert len(lines) >= line_num, 'must has ' + str(line_num) + ' lines: keys, delay, first_battle'
-    keys, delay, first_battle = lines[:line_num]
+    line_num = 2
+    assert len(lines) >= line_num, 'must has ' + str(line_num) + ' lines: keys, delay'
+    keys, delay = lines[:line_num]
 
     keys = keys.split('#')[0].strip().split(' ')
     assert len(keys) >= 2, 'keys must as key_macro key_battle key_auto'
@@ -293,15 +303,13 @@ def main(cfg='p_script.txt', as_test=0, _first_battle=None):
     cpos = (int(_cpos.split('-')[0]), int(_cpos.split('-')[1])) if '-' in _cpos else (0, 0)
 
     delay = float(delay.split('#')[0].strip())
-    first_battle = float(first_battle.split('#')[0].strip())
-    first_battle = float(_first_battle) if _first_battle.isdigit() else first_battle
 
     _mpos = (lines[line_num]).split('#')[0].strip() if len(lines) > line_num else '0-0'
     mpos = (int(_mpos.split('-')[0]), int(_mpos.split('-')[1])) if '-' in _mpos else (0, 0)
 
     try:
         lf = os.path.join(os.getcwd(), 'logs', 'p_script%s[%d-%d] %s.log' % (
-            '_test ' if as_test else '', os.getpid(), os.getpid(), _tt('%Y-%m-%d_%H_%M_%S', False)))
+            '_test ' if as_test else '', os.getpid(), os.getppid(), _tt('%Y-%m-%d_%H_%M_%S', False)))
         sys.stdout = Logger(lf)
 
         if mpos and mpos[0] > 0 and mpos[1] > 0:
