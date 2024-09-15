@@ -81,7 +81,7 @@ def findTopWindow(wantedText=None, wantedClass=None, selectionFunction=None):
     '''
     topWindows = findTopWindows(wantedText, wantedClass, selectionFunction)
     if topWindows:
-        return topWindows[0]
+        return topWindows[-1]
     else:
         raise WinGuiAutoError("No top level window found for wantedText=" +
                               repr(wantedText) +

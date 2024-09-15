@@ -14,7 +14,9 @@ import winsound
 import pyautogui
 import win32gui
 
-from winguiauto import findTopWindow, getCursorInfo, getPixel
+from winguiauto import findTopWindows, getCursorInfo, getPixel, WinGuiAutoError
+
+from BackstageMsg import BackstageKeyBoard
 
 G_HWND = None
 G_RECT = None
@@ -49,10 +51,32 @@ def _tt(fmt='%Y-%m-%d %H:%M:%S.%f', fix=True, now=None):
     return ret
 
 
-def find_wow_window():
+def findLeftTopTopWindow(wantedText=None, wantedClass=None, selectionFunction=None):
+    topWindows = findTopWindows(wantedText, wantedClass, selectionFunction)
+    if topWindows:
+        rects = [(h, win32gui.GetWindowPlacement(h)[-1]) for h in topWindows]
+        leftTop, needHwnd = 1440+900, None
+        for (hwnd, rect_) in rects:
+            val = abs(rect_[0]) + abs(rect_[1])
+            if val < leftTop:
+                leftTop, needHwnd = val, hwnd
+        return needHwnd if needHwnd else topWindows[-1]
+    else:
+        raise WinGuiAutoError("No top level window found for wantedText=" +
+                              repr(wantedText) +
+                              ", wantedClass=" +
+                              repr(wantedClass) +
+                              ", selectionFunction=" +
+                              repr(selectionFunction))
+
+
+def find_wow_window(acc=0):
     global G_HWND, G_RECT
 
-    hwnd = G_HWND if G_HWND else findTopWindow("魔兽世界")
+    if acc % == 0 and acc > 20:
+        G_HWND, G_RECT = None, None
+        
+    hwnd = G_HWND if G_HWND else findLeftTopTopWindow("魔兽世界")
     G_HWND = hwnd if hwnd else None
 
     if not G_HWND:
@@ -88,7 +112,7 @@ def http_get(url):
         return 500, 'Err: %r => %s' % (type(ex), ex)
 
 
-rect = [0, 0]
+rect = [0, 0, 1440, 900]
 _tp = lambda pos=None, y=None: pos if isinstance(pos, (tuple, list)) else (pos, y)
 
 r_moveTo = lambda *args, **kwgs: pyautogui.moveTo(*args, **kwgs)
@@ -97,6 +121,21 @@ x_moveTo = lambda pos=None, y=None, **kwgs: pyautogui.moveTo(rect[0] + _tp(pos, 
                                                              rect[1] + _tp(pos, y)[1], **kwgs)
 x_click = lambda pos=None, y=None, **kwgs: pyautogui.click(rect[0] + _tp(pos, y)[0],
                                                            rect[1] + _tp(pos, y)[1], **kwgs)
+
+USE_BACKS = True
+
+x_press = lambda k: b_press(k) if USE_BACKS else \
+    (pyautogui.scroll(-3 if k == 'wd' else 3) if k in ('wd', 'wu') else pyautogui.press(k))
+
+
+def b_press(k):
+    global rect, G_HWND
+    x, y = int(rect[0] + rect[2] * 0.7), int(rect[1] + rect[3] * 0.7)
+    if k in ('wd', 'wu'):
+        pyautogui.scroll(-3 if k == 'wd' else 3, x, y)
+    else:
+        obj = BackstageKeyBoard(G_HWND)
+        obj.pressKey(k)
 
 
 def getImgPixel(x, y):
@@ -111,7 +150,7 @@ def sameColor(rgb, origin, limit=10):
     return (a[0] < rgb[0] < b[0]) and (a[1] < rgb[1] < b[1]) and (a[2] < rgb[2] < b[2])
 
 
-def getImgState(_rect, mpos, cpos, acc, crgb_=(5, 112, 30), mrgb_=(64, 8, 11)):
+def getImgState(_rect, mpos, cpos, acc, crgb_=(5, 112, 30), crgb2_=(0, 16, 0), mrgb_=(64, 8, 11)):
     image = pyautogui.screenshot()
 
     xy = (_rect[0] + cpos[0], _rect[1] + cpos[1])
@@ -120,14 +159,14 @@ def getImgState(_rect, mpos, cpos, acc, crgb_=(5, 112, 30), mrgb_=(64, 8, 11)):
     xy = (_rect[0] + mpos[0], _rect[1] + mpos[1])
     mrgb = image.getpixel(xy)
 
-    if not sameColor(crgb, crgb_):
-        state = 'retry'
-    else:
+    if sameColor(crgb, crgb_) or sameColor(crgb, crgb2_):
         state = 'battle'
         if sameColor(mrgb, mrgb_):
             state = 'auto'
+    else:
+        state = 'retry'
 
-    if (acc <= 20 and state == 'retry') or (acc <= 5 and state == 'auto'):
+    if (acc <= 10 and state == 'retry') or (acc <= 5 and state == 'auto'):
         print(_t(), state, f'{cpos[0]}-{cpos[1]}:', crgb, f'{mpos[0]}-{mpos[1]}:', mrgb, acc)
 
     return state
@@ -135,7 +174,7 @@ def getImgState(_rect, mpos, cpos, acc, crgb_=(5, 112, 30), mrgb_=(64, 8, 11)):
 
 class Agent:
 
-    def __init__(self, mpos, cpos=None, key_macro='q', key_battle='wd', key_auto='f',
+    def __init__(self, mpos, cpos=None, key_macro='wu', key_battle='wd', key_auto='wd',
                  tmax=16.9, tmin=3.5, wh=(1440, 900)):
         self.mpos = mpos
         self.key_macro, self.key_battle, self.key_auto = key_macro, key_battle, key_auto
@@ -188,7 +227,7 @@ class Agent:
             if nn <= 0:
                 break
 
-    def check_shutdown_acc(self, shutdown_acc, limit=30):
+    def check_shutdown_acc(self, shutdown_acc, limit=20):
         if shutdown_acc > limit:
             self._check_image('shutdown')
             self.do_shutdown()
@@ -205,28 +244,28 @@ class Agent:
         self.acc, self.state, self.no = 0, 'init', no
         delay, self.shutdown_acc = 0, 0.0
 
-        set_top_window()
+        USE_BACKS or set_top_window()
         self._check_image('pve_full_init')
 
         while True:
             self.acc += 1
-            rect = find_wow_window()
+            rect = find_wow_window(self.acc)
 
             time.sleep((random.random() + delay) / 3.0 if delay > 0 else 0.3)
 
             self.state = getImgState(rect, self.mpos, self.check_pos, self.acc)
             if self.state in ['retry', 'init']:
-                pyautogui.press(self.key_macro)
+                x_press(self.key_macro)
                 time.sleep(0.4)
-                pyautogui.press(self.key_auto)
+                x_press(self.key_auto)
                 time.sleep(0.4)
-                pyautogui.press(self.key_macro)
+                x_press(self.key_macro)
                 print(_t(), self.state, 'press:', self.key_macro, _acc())
                 time.sleep(1.8)
 
             self.state = getImgState(rect, self.mpos, self.check_pos, self.acc)
             if self.state == 'retry':
-                set_top_window()
+                USE_BACKS or set_top_window()
                 self.shutdown_acc += 0.1
                 print(_t('error'), self.state, _acc())
                 self._check_image('%s-%d' % (self.state, int(self.shutdown_acc * 10))) if int(
@@ -245,14 +284,12 @@ class Agent:
                     self.state = getImgState(rect, self.mpos, self.check_pos, self.acc)
                     if self.state == 'retry':
                         retry_n += 1
-                    if retry_n >= 5 or self.state == 'auto':
+                    if retry_n >= 3 or self.state == 'auto':
                         break
 
                 if self.state == 'auto':
                     self.shutdown_acc = 0
-                    pyautogui.press(self.key_battle) if len(self.key_battle) == 1 else \
-                        (pyautogui.scroll(-3) if self.key_battle == 'wd' else pyautogui.scroll(3))
-                    print(_t(), self.state, 'press:', self.key_battle, _acc())
+                    x_press(self.key_battle)
                     time.sleep(1.8)
 
     def _check_image(self, tag='', pp='tmp', level='warn'):
