@@ -73,8 +73,10 @@ def findLeftTopTopWindow(wantedText=None, wantedClass=None, selectionFunction=No
 def find_wow_window(acc=0):
     global G_HWND, G_RECT
 
-    if acc % == 0 and acc > 20:
-        G_HWND, G_RECT = None, None
+    if acc %10 == 0 and acc > 20:
+        hwnd_ = findLeftTopTopWindow("魔兽世界")
+        G_HWND = hwnd_ if hwnd_ else G_HWND
+        G_RECT = win32gui.GetWindowPlacement(hwnd_)[-1] if hwnd_ else G_RECT
         
     hwnd = G_HWND if G_HWND else findLeftTopTopWindow("魔兽世界")
     G_HWND = hwnd if hwnd else None
